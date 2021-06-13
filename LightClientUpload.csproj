@@ -7,8 +7,8 @@
     <ProjectGuid>{499678CE-EE00-451C-A931-4CD4741184EC}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>RIAK_Upload</RootNamespace>
-    <AssemblyName>RIAK-Upload</AssemblyName>
+    <RootNamespace>LightClientUpload</RootNamespace>
+    <AssemblyName>LightClientUpload</AssemblyName>
     <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -42,10 +42,19 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="LightClientUpload.cs" />
+    <Compile Include="FileUploadResponse.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ClassDiagram1.cd" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="CodeFluentRuntimeClient">
+      <Version>1.0.0.844</Version>
+    </PackageReference>
+    <PackageReference Include="LUC.DVVSet">
+      <Version>1.0.0.1</Version>
+    </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
