@@ -27,7 +27,7 @@
         }
     }
 
-    public abstract class BaseResponse : INotificationResult
+        public abstract class BaseResponse : INotificationResult
     {
         public BaseResponse()
         {
