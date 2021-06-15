@@ -16,7 +16,7 @@
 
         public string Guid { get; set; }
 
-        public string ToString()
+        public override string ToString()
         {
             var responseStr = $"{nameof(FileUploadResponse)}:\n" +
                 $"{nameof(OriginalName)} = {OriginalName};\n" +
@@ -47,4 +47,10 @@
         public bool IsForbidden { get; set; } = false;
     }
 
+        public interface INotificationResult
+    {
+        bool IsSuccess { get; set; }
+
+        string Message { get; set; }
+    }
 }

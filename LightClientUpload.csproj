@@ -52,9 +52,7 @@
     <PackageReference Include="CodeFluentRuntimeClient">
       <Version>1.0.0.844</Version>
     </PackageReference>
-    <PackageReference Include="LUC.DVVSet">
-      <Version>1.0.0.1</Version>
-    </PackageReference>
+    <PackageReference Include="LUC.DVVSet" Version="1.0.0.2" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
