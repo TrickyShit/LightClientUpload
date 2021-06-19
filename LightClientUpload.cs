@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using LUC.DVVSet;
+using LUC.Services.Implementation;
 
 namespace LightClient
 {
@@ -16,11 +17,12 @@ namespace LightClient
 
         public LightClient() { }
 
-        public async Task<FileUploadResponse> Upload(string host, string user_id, string bucket_id, string fullPath, string filePrefix, string guid = "")
+        public async Task<FileUploadResponse> Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string guid = "")
         {
-            var requestUri = PostUploadUri();
+            var requestUri = Combine(host, "riak", "upload", bucket_id);
             //var startTime = DateTime.UtcNow;
-            var timeStamp = FromDateTimeToUnixTimeStamp(File.GetLastWriteTimeUtc(fullPath)).ToString();
+            var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
+            var timeStamp = (lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds.ToString();
             var version = IncrementVersion(user_id, timeStamp);
             var fileInfo = new FileInfo(fullPath);
 
@@ -28,9 +30,9 @@ namespace LightClient
             {
                 ChunkRequestUri = requestUri,
                 Guid = guid,
-                IsLastChunk = fileInfo.Length < FILE_UPLOAD_CHUNK_SIZE
+                IsLastChunk = fileInfo.Length < FILE_UPLOAD_CHUNK_SIZE,
+                IsFirstChunk = true
             };
-
 
             var uploadParams = new Dictionary<string, string>
                 {
@@ -44,21 +46,7 @@ namespace LightClient
                 uploadParams.Add("guid", guid);
             }
 
-            return await ResponseOfIterativelyUploadFile(fileInfo, chunkUploadState, uploadParams, filePrefix);
-
-            string PostUploadUri()
-            {
-                var result = Combine(host, "riak", "upload", bucket_id);
-                return result;
-            }
-
-
-            long FromDateTimeToUnixTimeStamp(DateTime dateTime)
-            {
-                var result = (dateTime - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
-
-                return (long)result;
-            }
+            return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams, filePrefix);
         }
 
         private string Combine(params string[] uri)
@@ -92,20 +80,19 @@ namespace LightClient
             return version;
         }
 
-        private async Task<FileUploadResponse> ResponseOfIterativelyUploadFile(FileInfo fileInfo, ChunkUploadState uploadState,
+        private async Task<FileUploadResponse> ResponseOfIterativelyUploadFile(FileInfo fileInfo, string token, ChunkUploadState uploadState,
     Dictionary<string, string> uploadParams, string filePrefix)
         {
+            var fileUploadResponse = new FileUploadResponse();
             string fullPath = fileInfo.FullName;
             var calculatedMd5S = new List<string>();
-            var md5OfFullFile = FileUploadResponse.CalculateMd5Hash(fullPath);
+            var md5OfFullFile = fileUploadResponse.CalculateMd5Hash(fullPath);
             string baseRequestUrl = uploadState.ChunkRequestUri;
 
             foreach (var currentPlainBytes in FileUploadResponse.IterateFileChunksWithoutFileBlocking(fullPath, offset: 0))
             {
-                var currentLocalMd5 = FileUploadResponse.CalculateMd5Hash(currentPlainBytes);
+                var currentLocalMd5 = fileUploadResponse.CalculateMd5Hash(currentPlainBytes);
                 calculatedMd5S.Add(currentLocalMd5);
-
-                Console.WriteLine();
 
                 var percents = uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE / (double)fileInfo.Length;
                 Console.WriteLine($"Upload part[{uploadState.PartNumber}] for file {fileInfo.Name}. Uploaded {percents:P2}");
@@ -114,9 +101,10 @@ namespace LightClient
                 if (uploadState.IsFirstChunk && !uploadParams.ContainsKey("guid"))
                 {
                     multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, currentPlainBytes, uploadState, uploadParams, fileInfo);
+                    bool whetherGetGuid = true;
 
-                    var responseGetGuid = await ServerUploadResponse(multipartFormData, uploadState, currentLocalMd5,
-                        currentPlainBytes, fileInfo, whetherGetGuid: true);
+                    var responseGetGuid = await ServerUploadResponse(multipartFormData, token, uploadState, currentLocalMd5,
+                        currentPlainBytes, fileInfo, whetherGetGuid);
                     if (!responseGetGuid.IsSuccess)
                     {
                         return responseGetGuid;
@@ -126,16 +114,16 @@ namespace LightClient
                     if (!uploadParams.ContainsKey("guid"))
                     {
                         guidValue = uploadState.LastResponse.Guid;
-                        uploadParams.Add(FileUploadRequest.PropGuid, guidValue);
+                        uploadParams.Add("guid", guidValue);
                     }
                     else
                     {
-                        guidValue = uploadParams[FileUploadRequest.PropGuid];
+                        guidValue = uploadParams["guid"];
                     }
 
-                    AdsExtensions.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fullPath, guidValue);
+                    fileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fullPath, guidValue);
 
-                    if (fileInfo.Length <= UploadConstants.SingleChunkMaxSize)
+                    if (fileInfo.Length <= FILE_UPLOAD_CHUNK_SIZE)
                     {
                         return responseGetGuid;
                     }
@@ -150,15 +138,16 @@ namespace LightClient
 
                 //add method ServerRequestToPostChunk
                 multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, currentPlainBytes, uploadState, uploadParams, fileInfo);
-                var responseChunkUpload = await ServerUploadResponse(multipartFormData, uploadState, currentLocalMd5,
-                    currentPlainBytes, fileInfo, operationTime, whetherGetGuid: false);
+
+                var responseChunkUpload = await ServerUploadResponse(multipartFormData, token, uploadState, currentLocalMd5,
+                    currentPlainBytes, fileInfo, whetherGetGuid: false);
 
                 if (uploadState.IsLastChunk)
                 {
                     return responseChunkUpload;
                 }
 
-                var responseIfChanged = ResponseIfChangedWhileUploadFile(fullPath, operationTime.OriginalModifiedDateTime);
+                var responseIfChanged = fileUploadResponse.ResponseIfChangedWhileUploadFile(fullPath, File.GetLastWriteTimeUtc(fullPath));
                 if (!responseIfChanged.IsSuccess)
                 {
                     return responseIfChanged;
@@ -172,13 +161,14 @@ namespace LightClient
             return new FileUploadResponse
             {
                 IsSuccess = false,
-                Message = $"Technical error. For big file method '{nameof(ByteArrayExtensions.IterateFileChunks)}' was missed somehow..."
+                Message = $"Technical error. For big file method '{nameof(fileUploadResponse.IterateFileChunks)}' was missed somehow..."
             };
         }
 
         private MultipartFormDataContent MultipartFormData(List<String> calculatedMd5S, String md5OfChunk, Byte[] bytes,
             ChunkUploadState uploadState, Dictionary<String, String> uploadParams, FileInfo fileInfo)
         {
+            var fileUploadResponse = new FileUploadResponse();
             var boundary = "-----" + DateTime.Now.Ticks.ToString("x");
             var multiPartContent = new MultipartFormDataContent(boundary);
 
@@ -202,14 +192,14 @@ namespace LightClient
 
             multiPartContent.Add(new StringContent(md5OfChunk), "md5");
 
-            var md5OfFullFile = FileUploadResponse.CalculateMd5Hash(fileInfo.FullName);
+            var md5OfFullFile = fileUploadResponse.CalculateMd5Hash(fileInfo.FullName);
             multiPartContent.Headers.ContentMD5 = Encoding.ASCII.GetBytes(md5OfFullFile);
 
-            var endByte = multiPartContent.AddContentRange(uploadState, fileInfo);    //add ContentRange
+            var endByte = AddContentRange(multiPartContent, uploadState, fileInfo);    //add ContentRange
 
             if (uploadState.IsLastChunk)
             {
-                multiPartContent.AddETags(calculatedMd5S);
+                AddETags(multiPartContent, calculatedMd5S);
 
                 var i = 0;
                 Console.WriteLine("Last lap!");
@@ -219,8 +209,168 @@ namespace LightClient
                     i++;
                 }
             }
-
             return multiPartContent;
+        }
+
+        private async Task<FileUploadResponse> ServerUploadResponse(MultipartFormDataContent multipartContent, string token, ChunkUploadState uploadState,
+    string currentLocalMd5, Byte[] currentBytes, FileInfo fileInfo, Boolean whetherGetGuid)
+        {
+            HttpResponseMessage httpResponse;
+
+            using (var httpClient = new RepeatableHttpClient(token))
+            {
+                httpClient.BaseAddress = new Uri(uploadState.ChunkRequestUri);
+
+                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                try
+                {
+                    var repeatableHttpClient = new RepeatableHttpClient();
+                    httpResponse = httpClient.PostAsync(uploadState.ChunkRequestUri, multipartContent).Result;
+
+                    HttpStatusCode statusCode = httpResponse.StatusCode;
+                    HttpContent responseContent = httpResponse.Content;
+
+                    _ = await repeatableHttpClient.ServerMessage(responseContent);
+
+                    //add method HandleGoodUploadRequest
+                    if (httpResponse.IsSuccessStatusCode)
+                    {
+                        try
+                        {
+                            var lastResponse = await responseContent.ReadAsStringAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(ex.ToString(), ex.Message);
+
+                            return new FileUploadResponse
+                            {
+                                IsSuccess = false,
+                                Message = "Can't read content from the response."
+                            };
+                            //throw new ArgumentException($"Can't read content from the response: {ex.Message}");
+                        }
+
+                        if (currentLocalMd5 != uploadState.LastResponse.Md5 && false) // TODO Release 2.0 Server Temp do not use the logic.
+                        {
+                            var message = "Calculated Md5 and Md5 from server are different";
+                            Console.WriteLine(message);
+
+                            return new FileUploadResponse
+                            {
+                                IsSuccess = false,
+                                Message = message
+                            };
+                            //var message = "Calculated Md5 and Md5 from server are different";
+                            //throw new ArgumentException(message);
+                        }
+
+                        if (!whetherGetGuid || (uploadState.IsFirstChunk && uploadState.IsLastChunk))
+                        {
+                            var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fileInfo.FullName);
+                            var timeStamp = (lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+
+                            FileUploadResponse.TryWriteLastSeenModifiedUtc(fileInfo.FullName, (long)timeStamp);
+
+                            //var finishUploadTime = DateTime.UtcNow;
+
+                            var message = $"File {fileInfo.FullName} was uploaded";// by {(finishUploadTime - startTime).TotalMinutes} minutes.";
+                            //Console.WriteLine(message);
+                            //Console.WriteLine();
+
+                            var lastResponse = uploadState.LastResponse as FileUploadResponse;
+                            return new FileUploadResponse
+                            {
+                                IsSuccess = true,
+                                Message = message,
+                                OriginalName = lastResponse.OriginalName,
+                                UploadTime = lastResponse.UploadTime,
+                                Guid = uploadState.LastResponse.Guid
+                            };
+                        }
+                    }
+                    // else if (statusCode == HttpStatusCode.Forbidden)
+                    // {
+                    //     return await HandleResponse.HandleResponse403<FileUploadResponse>(httpResponse, $"Status code = '{statusCode}'.", CurrentUserProvider);
+                    // }
+                    // else
+                    // {
+                    //     filePrefix = await ObjectNameProvider.ServerPrefix(fileInfo.FullName);
+
+                    //     var notSuccess = await HandleResponse.BuildNotSuccessResult(httpResponse, fileInfo, filePrefix, LoggingService);
+                    //     return notSuccess;
+                    // }
+
+                    if (whetherGetGuid)
+                    {
+                        Console.WriteLine($"Response {statusCode} is recieved for first request");
+                    }
+                    else
+                    {
+                        uploadState.IsFirstChunk = false;
+                        uploadState.IncreasePartNumber();
+
+                        Console.WriteLine($"Response {statusCode} is recieved for part number = {uploadState.PartNumber}");
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+
+                    return new FileUploadResponse
+                    {
+                        IsSuccess = false,
+                        Message = ex.Message
+                    };
+                }
+            }
+
+            return new FileUploadResponse
+            {
+                IsSuccess = true,
+                Guid = uploadState.LastResponse.Guid
+            };
+        }
+
+        internal long AddContentRange(MultipartFormDataContent content, ChunkUploadState uploadState, FileInfo fileInfo)
+        {
+            long endByte;
+            if ((((uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE) - 1) > fileInfo.Length)
+            {
+                uploadState.IsLastChunk = true;
+                endByte = fileInfo.Length - 1;
+
+                //content.Headers.TryAddWithoutValidation("content-range", "bytes " + uploadState.PartNumber * (long)UploadConstants.SingleChunkMaxSize + "-" + endByte + @"/" + fileInfo.Length);
+            }
+            else
+            {
+                endByte = ((uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE) - 1;
+                //content.Headers.TryAddWithoutValidation("content-range", "bytes " + uploadState.PartNumber * (long)UploadConstants.SingleChunkMaxSize + "-" + endByte + @"/" + fileInfo.Length);
+            }
+            content.Headers.Add("content-range", $"bytes {uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE}-{endByte}{@"/"}{fileInfo.Length}");
+
+            return endByte;
+        }
+
+        internal void AddETags(MultipartFormDataContent content, List<string> md5S)
+        {
+            var etags = "";
+
+            if (md5S?.Count != 0)
+            {
+                var part = 1;
+                foreach (var md5 in md5S)
+                {
+                    etags += $"{part},{md5},";
+                    part++;
+                }
+
+                etags = etags.Remove(etags.Length - 1, 1);
+            }
+
+            content.Add(new StringContent(etags), "etags[]");
         }
 
     }
