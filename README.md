@@ -2,8 +2,8 @@
 
 This is a library for uploading files to RIAK servers. Can used by this parameters:
 
-var lightClient = new LightClient.LightClient();
-HttpResponseMessage response = await lightClient.Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string guid = "");
+var lightClient = new LightClient.LightClient();  
+HttpResponseMessage response = await lightClient.Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string guid = "");  
 
         Host - server Url. Example - https://lightupon.cloud
         Token - authorization token from server. Example - "647c7fde-936c-447a-8640-55dc8c1c69cb"
@@ -13,8 +13,10 @@ HttpResponseMessage response = await lightClient.Upload(string host, string toke
         filePrefix - prefix from server, need if file located in the subdirectory, else ""
         guid - file identificator from server
         
-Method contains a vector version clock (DVVSet), so we can solve a various conflicts with a many versions of uploading files, for example.
+Method contains a vector version clock (DVVSet), so we can solve a various conflicts with a many versions of uploading files, for example.  
 
-Documentation for work with RIAK-server:
-https://github.com/lightuponcloud/dubstack/blob/master/API.md
+Files with size more than 2000000 bytes split into parts and uploads.  
+
+Documentation for work with RIAK-server:  
+https://github.com/lightuponcloud/dubstack/blob/master/API.md  
 
