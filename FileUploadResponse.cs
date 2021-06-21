@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using CodeFluent.Runtime.BinaryServices;
@@ -16,11 +15,6 @@ namespace LightClient
         private const string GuidAdsName = "com.dubstack.guid";
         private const string LocalPathAdsName = "com.dubstack.path";
         private const string LastSeenModifiedUtc = "com.dubstack.servermodifiedutc";
-
-
-        public FileUploadResponse(bool isSuccess, bool isForbidden, string message) : base(isSuccess, isForbidden, message)
-        {
-        }
 
         public FileUploadResponse() : base()
         {
@@ -44,11 +38,10 @@ namespace LightClient
         [JsonProperty("upload_time")]
         public int UploadTime { get; set; }
 
-
+        [JsonProperty("orig_name")]
         public string OriginalName { get; set; }
 
         public long ModifiedUtc { get; set; }
-
 
         public string CalculateMd5Hash(string filename)
         {
@@ -76,26 +69,6 @@ namespace LightClient
             }
         }
 
-        public void AddETags(MultipartFormDataContent content, List<string> md5S)
-        {
-            var etags = "";
-
-            if (md5S?.Count != 0)
-            {
-                var part = 1;
-                foreach (var md5 in md5S)
-                {
-                    etags += $"{part},{md5},";
-                    part++;
-                }
-
-                etags = etags.Remove(etags.Length - 1, 1);
-            }
-
-            content.Add(new StringContent(etags), "etags[]");
-        }
-
-
         public static IEnumerable<byte[]> IterateFileChunksWithoutFileBlocking(string filePath, Int32 offset)
         {
             if (!File.Exists(filePath))
@@ -120,7 +93,7 @@ namespace LightClient
                     chunkSize = LightClient.FILE_UPLOAD_CHUNK_SIZE;
                 }
 
-                //add cycle do while(FileStrea.Length - FileStream.Position <) 
+                //add cycle do while(FileStrea.Length - FileStream.Position <)
                 var buffer = new Byte[chunkSize];
                 for (Int32 countReadBytes = 1; countReadBytes > 0; offset += countReadBytes)
                 {
@@ -241,7 +214,7 @@ namespace LightClient
             File.SetLastWriteTimeUtc(path, currentLastWriteUtc);//maybe this row should be deleted
         }
 
-        string ToHexString(string value)
+        private string ToHexString(string value)
         {
             var bytes = Encoding.UTF8.GetBytes(value);
 
@@ -341,6 +314,7 @@ namespace LightClient
     internal class ChunkUploadState // TODO Release 2.0 Range for download Range: 65545-
     {
         internal FileUploadResponse lastResponse;
+
         internal FileUploadResponse LastResponse
         {
             get { return lastResponse; }
@@ -369,6 +343,5 @@ namespace LightClient
         {
             PartNumber++;
         }
-
     }
 }
