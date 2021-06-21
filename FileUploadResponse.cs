@@ -9,63 +9,88 @@ using Newtonsoft.Json;
 
 namespace LightClient
 {
+    public interface INotificationResult
+    {
+        bool IsSuccess { get; set; }
+
+        string Message { get; set; }
+    }
+
+    public abstract class BaseResponse : INotificationResult
+    {
+        public BaseResponse()
+        {
+        }
+
+        public BaseResponse(bool isSuccess, bool isForbidden, string message)
+        {
+            IsSuccess = isSuccess;
+            IsForbidden = isForbidden;
+            Message = message;
+        }
+
+        public bool IsForbidden { get; set; } = false;
+        public bool IsSuccess { get; set; } = true;
+
+        public string Message { get; set; }
+    }
+
     public class FileUploadResponse : BaseResponse
     {
-        private const string LockAdsName = "com.dubstack.lock";
         private const string GuidAdsName = "com.dubstack.guid";
-        private const string LocalPathAdsName = "com.dubstack.path";
         private const string LastSeenModifiedUtc = "com.dubstack.servermodifiedutc";
+        private const string LocalPathAdsName = "com.dubstack.path";
+        private const string LockAdsName = "com.dubstack.lock";
 
         public FileUploadResponse() : base()
         {
         }
 
-        [JsonProperty("guid")]
-        public string Guid { get; set; }
-
         [JsonProperty("end_byte")]
         public string EndByte { get; set; }
 
-        [JsonProperty("upload_id")]
-        public string UploadId { get; set; }
-
-        [JsonProperty("version")]
-        public string Version { get; set; }
+        [JsonProperty("guid")]
+        public string Guid { get; set; }
 
         [JsonProperty("md5")]
         public string Md5 { get; set; }
 
-        [JsonProperty("upload_time")]
-        public int UploadTime { get; set; }
+        public long ModifiedUtc { get; set; }
 
         [JsonProperty("orig_name")]
         public string OriginalName { get; set; }
 
-        public long ModifiedUtc { get; set; }
+        [JsonProperty("upload_id")]
+        public string UploadId { get; set; }
 
-        public string CalculateMd5Hash(string filename)
-        {
-            using (MD5 md5Hash = MD5.Create())
-            {
-                var sb = new StringBuilder();
-                foreach (var data in md5Hash.ComputeHash(File.ReadAllBytes(filename)))
-                {
-                    sb.Append(data.ToString("x2"));
-                }
-                return sb.ToString();
-            }
-        }
+        [JsonProperty("upload_time")]
+        public int UploadTime { get; set; }
 
-        public string CalculateMd5Hash(byte[] filename)
+        [JsonProperty("version")]
+        public string Version { get; set; }
+
+        public static IEnumerable<byte[]> IterateFileChunks(string filePath)
         {
-            using (MD5 md5Hash = MD5.Create())
+            using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
             {
-                var sb = new StringBuilder();
-                foreach (var data in md5Hash.ComputeHash(filename))
+                var buffer = new byte[LightClient.FILE_UPLOAD_CHUNK_SIZE];
+                fileStream.Seek(0, SeekOrigin.Begin);
+                var bytesRead = fileStream.Read(buffer, 0, LightClient.FILE_UPLOAD_CHUNK_SIZE);
+
+                while (bytesRead > 0)
                 {
-                    sb.Append(data.ToString("x2"));
+                    if (bytesRead < LightClient.FILE_UPLOAD_CHUNK_SIZE)
+                    {
+                        buffer = buffer.Take(bytesRead).ToArray();
+
+                        yield return buffer;
+                        break;
+                    }
+
+                    yield return buffer;
+
+                    bytesRead = fileStream.Read(buffer, 0, LightClient.FILE_UPLOAD_CHUNK_SIZE);
                 }
-                return sb.ToString();
             }
         }
 
@@ -138,6 +163,66 @@ namespace LightClient
                 Console.WriteLine($"{path} has last seen modified utc {text}");
             }
             catch (DirectoryNotFoundException) { }
+        }
+
+        public string CalculateMd5Hash(string filename)
+        {
+            using (MD5 md5Hash = MD5.Create())
+            {
+                var sb = new StringBuilder();
+                foreach (var data in md5Hash.ComputeHash(File.ReadAllBytes(filename)))
+                {
+                    sb.Append(data.ToString("x2"));
+                }
+                return sb.ToString();
+            }
+        }
+
+        public string CalculateMd5Hash(byte[] filename)
+        {
+            using (MD5 md5Hash = MD5.Create())
+            {
+                var sb = new StringBuilder();
+                foreach (var data in md5Hash.ComputeHash(filename))
+                {
+                    sb.Append(data.ToString("x2"));
+                }
+                return sb.ToString();
+            }
+        }
+
+        public FileUploadResponse ResponseIfChangedWhileUploadFile(String fullPath, DateTime originalModifiedDateTime)
+        {
+            var currentModifiedDateTime = /*DateTimeExtensions.LastWriteTimeUtcWithCorrectOffset*/File.GetLastWriteTimeUtc(fullPath);
+
+            if (originalModifiedDateTime != currentModifiedDateTime)
+            {
+                String message = $"Upload is stopped. File {fullPath} was changed just during uploading process.";
+                Console.WriteLine(message);
+
+                return new FileUploadResponse
+                {
+                    IsSuccess = false,
+                    Message = $"Upload is stopped. File {fullPath} was changed just during uploading process."
+                };
+            }
+            else
+            {
+                return new FileUploadResponse
+                {
+                    IsSuccess = true
+                };
+            }
+        }
+
+        public override string ToString()
+        {
+            var responseStr = $"{nameof(FileUploadResponse)}:\n" +
+                $"{nameof(OriginalName)} = {OriginalName};\n" +
+                $"{nameof(ModifiedUtc)} = {ModifiedUtc};\n" +
+                $"{nameof(Guid)} = {Guid}";
+
+            return responseStr;
         }
 
         public void TryWriteGuidAndLocalPathMarkersIfNotTheSame(string path, string guid)
@@ -223,97 +308,19 @@ namespace LightClient
 
             return result;
         }
-
-        public FileUploadResponse ResponseIfChangedWhileUploadFile(String fullPath, DateTime originalModifiedDateTime)
-        {
-            var currentModifiedDateTime = /*DateTimeExtensions.LastWriteTimeUtcWithCorrectOffset*/File.GetLastWriteTimeUtc(fullPath);
-
-            if (originalModifiedDateTime != currentModifiedDateTime)
-            {
-                String message = $"Upload is stopped. File {fullPath} was changed just during uploading process.";
-                Console.WriteLine(message);
-
-                return new FileUploadResponse
-                {
-                    IsSuccess = false,
-                    Message = $"Upload is stopped. File {fullPath} was changed just during uploading process."
-                };
-            }
-            else
-            {
-                return new FileUploadResponse
-                {
-                    IsSuccess = true
-                };
-            }
-        }
-
-        public static IEnumerable<byte[]> IterateFileChunks(string filePath)
-        {
-            using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
-            {
-                var buffer = new byte[LightClient.FILE_UPLOAD_CHUNK_SIZE];
-                fileStream.Seek(0, SeekOrigin.Begin);
-                var bytesRead = fileStream.Read(buffer, 0, LightClient.FILE_UPLOAD_CHUNK_SIZE);
-
-                while (bytesRead > 0)
-                {
-                    if (bytesRead < LightClient.FILE_UPLOAD_CHUNK_SIZE)
-                    {
-                        buffer = buffer.Take(bytesRead).ToArray();
-
-                        yield return buffer;
-                        break;
-                    }
-
-                    yield return buffer;
-
-                    bytesRead = fileStream.Read(buffer, 0, LightClient.FILE_UPLOAD_CHUNK_SIZE);
-                }
-            }
-        }
-
-        public override string ToString()
-        {
-            var responseStr = $"{nameof(FileUploadResponse)}:\n" +
-                $"{nameof(OriginalName)} = {OriginalName};\n" +
-                $"{nameof(ModifiedUtc)} = {ModifiedUtc};\n" +
-                $"{nameof(Guid)} = {Guid}";
-
-            return responseStr;
-        }
-    }
-
-    public abstract class BaseResponse : INotificationResult
-    {
-        public BaseResponse()
-        {
-        }
-
-        public BaseResponse(bool isSuccess, bool isForbidden, string message)
-        {
-            IsSuccess = isSuccess;
-            IsForbidden = isForbidden;
-            Message = message;
-        }
-
-        public bool IsSuccess { get; set; } = true;
-
-        public string Message { get; set; }
-
-        public bool IsForbidden { get; set; } = false;
-    }
-
-    public interface INotificationResult
-    {
-        bool IsSuccess { get; set; }
-
-        string Message { get; set; }
     }
 
     internal class ChunkUploadState // TODO Release 2.0 Range for download Range: 65545-
     {
         internal FileUploadResponse lastResponse;
+
+        internal string ChunkRequestUri { get; set; }
+
+        internal string Guid { get; set; }
+
+        internal bool IsFirstChunk { get; set; }
+
+        internal bool IsLastChunk { get; set; }
 
         internal FileUploadResponse LastResponse
         {
@@ -329,15 +336,7 @@ namespace LightClient
             }
         }
 
-        internal string ChunkRequestUri { get; set; }
-
-        internal bool IsFirstChunk { get; set; }
-
-        internal bool IsLastChunk { get; set; }
-
         internal long PartNumber { get; private set; }
-
-        internal string Guid { get; set; }
 
         internal void IncreasePartNumber()
         {

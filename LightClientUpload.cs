@@ -58,6 +58,34 @@ namespace LightClient
             return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams, filePrefix);
         }
 
+        internal long AddContentRange(MultipartFormDataContent content, ChunkUploadState uploadState, FileInfo fileInfo)
+        {
+            long endByte = ((uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE - 1) > fileInfo.Length
+                ? fileInfo.Length - 1
+                : ((uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE) - 1;
+            content.Headers.Add("content-range", $"bytes {uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE}-{endByte}{@"/"}{fileInfo.Length}");
+            return endByte;
+        }
+
+        internal void AddETags(MultipartFormDataContent content, List<string> md5S)
+        {
+            var etags = "";
+
+            if (md5S?.Count != 0)
+            {
+                var part = 1;
+                foreach (var md5 in md5S)
+                {
+                    etags += $"{part},{md5},";
+                    part++;
+                }
+
+                etags = etags.Remove(etags.Length - 1, 1);
+            }
+
+            content.Add(new StringContent(etags), "etags[]");
+        }
+
         private string Combine(params string[] uri)
         {
             uri[0] = uri[0].TrimEnd('/');
@@ -88,8 +116,54 @@ namespace LightClient
             return version;
         }
 
+        private MultipartFormDataContent MultipartFormData(List<string> calculatedMd5S, string md5OfChunk, Byte[] bytes,
+            ChunkUploadState uploadState, Dictionary<string, string> uploadParams, FileInfo fileInfo)
+        {
+            var fileUploadResponse = new FileUploadResponse();
+            var boundary = "-----" + DateTime.Now.Ticks.ToString("x");
+            var multiPartContent = new MultipartFormDataContent(boundary);
+
+            //In a normal HTTP response, the Content-Disposition header is an indication that the expected response content will be displayed in the browser as a web page or part of a web page, or as an attachment that can then be downloaded and saved locally.
+            //multiPartContent.Headers.TryAddWithoutValidation("Content-Type", "multipart/mixed; boundary=" + boundary);
+            multiPartContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
+            {
+                Name = "files[]",
+                FileName = fileInfo.Name,
+                Size = fileInfo.Length
+            };
+
+            foreach (var param in uploadParams)
+            {
+                multiPartContent.Add(new StringContent(param.Value), param.Key);
+            }
+
+            var bytemd5 = new ByteArrayContent(bytes);
+            bytemd5.Headers.ContentMD5 = Convert.FromBase64String(md5OfChunk);
+            multiPartContent.Add(bytemd5, "files[]", fileInfo.Name);
+
+            var md5OfFullFile = fileUploadResponse.CalculateMd5Hash(fileInfo.FullName);
+            multiPartContent.Headers.ContentMD5 = Convert.FromBase64String(md5OfFullFile);
+            multiPartContent.Add(new StringContent(md5OfChunk), "md5");
+
+            var endByte = AddContentRange(multiPartContent, uploadState, fileInfo);    //add ContentRange
+
+            if (uploadState.IsLastChunk)
+            {
+                AddETags(multiPartContent, calculatedMd5S);
+
+                var i = 0;
+                Console.WriteLine("Last lap!");
+                foreach (var calculatedItemMd5 in calculatedMd5S)
+                {
+                    Console.WriteLine($"Chunk: {i} - md5 {calculatedItemMd5}");
+                    i++;
+                }
+            }
+            return multiPartContent;
+        }
+
         private async Task<FileUploadResponse> ResponseOfIterativelyUploadFile(FileInfo fileInfo, string token, ChunkUploadState uploadState,
-                                                                               Dictionary<string, string> uploadParams, string filePrefix)
+                                                                                       Dictionary<string, string> uploadParams, string filePrefix)
         {
             var fileUploadResponse = new FileUploadResponse();
             string fullPath = fileInfo.FullName;
@@ -172,52 +246,6 @@ namespace LightClient
             };
         }
 
-        private MultipartFormDataContent MultipartFormData(List<string> calculatedMd5S, string md5OfChunk, Byte[] bytes,
-            ChunkUploadState uploadState, Dictionary<string, string> uploadParams, FileInfo fileInfo)
-        {
-            var fileUploadResponse = new FileUploadResponse();
-            var boundary = "-----" + DateTime.Now.Ticks.ToString("x");
-            var multiPartContent = new MultipartFormDataContent(boundary);
-
-            //In a normal HTTP response, the Content-Disposition header is an indication that the expected response content will be displayed in the browser as a web page or part of a web page, or as an attachment that can then be downloaded and saved locally.
-            //multiPartContent.Headers.TryAddWithoutValidation("Content-Type", "multipart/mixed; boundary=" + boundary);
-            multiPartContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
-            {
-                Name = "files[]",
-                FileName = fileInfo.Name,
-                Size = fileInfo.Length
-            };
-
-            foreach (var param in uploadParams)
-            {
-                multiPartContent.Add(new StringContent(param.Value), param.Key);
-            }
-
-            var bytemd5 = new ByteArrayContent(bytes);
-            bytemd5.Headers.ContentMD5 = Convert.FromBase64String(md5OfChunk);
-            multiPartContent.Add(bytemd5, "files[]", fileInfo.Name);
-
-            var md5OfFullFile = fileUploadResponse.CalculateMd5Hash(fileInfo.FullName);
-            multiPartContent.Headers.ContentMD5 = Convert.FromBase64String(md5OfFullFile);
-            multiPartContent.Add(new StringContent(md5OfChunk), "md5");
-
-            var endByte = AddContentRange(multiPartContent, uploadState, fileInfo);    //add ContentRange
-
-            if (uploadState.IsLastChunk)
-            {
-                AddETags(multiPartContent, calculatedMd5S);
-
-                var i = 0;
-                Console.WriteLine("Last lap!");
-                foreach (var calculatedItemMd5 in calculatedMd5S)
-                {
-                    Console.WriteLine($"Chunk: {i} - md5 {calculatedItemMd5}");
-                    i++;
-                }
-            }
-            return multiPartContent;
-        }
-
         private async Task<HttpResponseMessage> ServerUploadResponse(MultipartFormDataContent multipartContent, string token, ChunkUploadState uploadState,
     string currentLocalMd5, FileInfo fileInfo)
         {
@@ -287,34 +315,6 @@ namespace LightClient
                 }
             }
             return httpResponse;
-        }
-
-        internal long AddContentRange(MultipartFormDataContent content, ChunkUploadState uploadState, FileInfo fileInfo)
-        {
-            long endByte = ((uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE - 1) > fileInfo.Length
-                ? fileInfo.Length - 1
-                : ((uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE) - 1;
-            content.Headers.Add("content-range", $"bytes {uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE}-{endByte}{@"/"}{fileInfo.Length}");
-            return endByte;
-        }
-
-        internal void AddETags(MultipartFormDataContent content, List<string> md5S)
-        {
-            var etags = "";
-
-            if (md5S?.Count != 0)
-            {
-                var part = 1;
-                foreach (var md5 in md5S)
-                {
-                    etags += $"{part},{md5},";
-                    part++;
-                }
-
-                etags = etags.Remove(etags.Length - 1, 1);
-            }
-
-            content.Add(new StringContent(etags), "etags[]");
         }
     }
 }
