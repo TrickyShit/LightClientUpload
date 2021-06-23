@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using LUC.DVVSet;
-using LUC.Services.Implementation;
 using Newtonsoft.Json;
 
 namespace LightClient
@@ -252,15 +251,15 @@ namespace LightClient
             HttpResponseMessage httpResponse = new HttpResponseMessage();
 
             ServicePointManager.Expect100Continue = true;   //try to get response 100 from server
-            using (var httpClient = new RepeatableHttpClient(token))
+            using (var httpClient = new HttpClient())
             {
                 httpClient.BaseAddress = new Uri(uploadState.ChunkRequestUri);
+                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", token);
 
                 httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
                 try
                 {
-                    var repeatableHttpClient = new RepeatableHttpClient();
                     httpResponse = httpClient.PostAsync(uploadState.ChunkRequestUri, multipartContent).Result;
 
                     HttpStatusCode statusCode = httpResponse.StatusCode;

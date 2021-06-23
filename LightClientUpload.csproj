@@ -44,7 +44,6 @@
     <Compile Include="LightClientUpload.cs" />
     <Compile Include="FileUploadResponse.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="RepeatableHttpClient.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CodeFluentRuntimeClient">
