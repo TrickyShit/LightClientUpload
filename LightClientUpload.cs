@@ -155,7 +155,7 @@ namespace LightClient
                         uploadParams.Add("guid", uploadState.LastResponse.Guid);
                     }
 
-                    fileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fullPath, uploadState.LastResponse.Guid);
+                    //fileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fullPath, uploadState.LastResponse.Guid);  // - this is logic for download, not upload
 
                     if (fileInfo.Length <= FILE_UPLOAD_CHUNK_SIZE)   //If file < 2000000 bytes then first request = upload to server
                         return response;
@@ -219,8 +219,8 @@ namespace LightClient
             bytemd5.Headers.ContentMD5 = Convert.FromBase64String(md5OfChunk);
             multiPartContent.Add(bytemd5, "files[]", fileInfo.Name);
 
-            var md5OfFullFile = fileUploadResponse.CalculateMd5Hash(fileInfo.FullName);
-            multiPartContent.Headers.ContentMD5 = Convert.FromBase64String(md5OfFullFile);
+            //var md5OfFullFile = fileUploadResponse.CalculateMd5Hash(fileInfo.FullName);
+            //multiPartContent.Headers.ContentMD5 = Convert.FromBase64String(md5OfFullFile);
             multiPartContent.Add(new StringContent(md5OfChunk), "md5");
 
             var endByte = AddContentRange(multiPartContent, uploadState, fileInfo);    //add ContentRange
@@ -259,6 +259,7 @@ namespace LightClient
 
                     HttpStatusCode statusCode = httpResponse.StatusCode;
                     HttpContent responseContent = httpResponse.Content;
+                    var json = await responseContent.ReadAsStringAsync();
 
                     //add method HandleGoodUploadRequest
                     if (httpResponse.IsSuccessStatusCode)
@@ -287,7 +288,7 @@ namespace LightClient
                             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fileInfo.FullName);
                             var timeStamp = ((int)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds);
 
-                            FileUploadResponse.TryWriteLastSeenModifiedUtc(fileInfo.FullName, (long)timeStamp);
+                            //FileUploadResponse.TryWriteLastSeenModifiedUtc(fileInfo.FullName, (long)timeStamp);
 
                             var message = $"File {fileInfo.FullName} was uploaded";
                             Console.WriteLine(message);

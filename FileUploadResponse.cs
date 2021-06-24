@@ -37,62 +37,74 @@ namespace LightClient
 
     public class FileUploadResponse : BaseResponse
     {
-        private const string GuidAdsName = "com.dubstack.guid";
-        private const string LastSeenModifiedUtc = "com.dubstack.servermodifiedutc";
-        private const string LocalPathAdsName = "com.dubstack.path";
-        private const string LockAdsName = "com.dubstack.lock";
+        private const string GuidAdsName = "cloud.lightupon.guid";
+        private const string LastSeenModifiedUtc = "cloud.lightupon.servermodifiedutc";
+        private const string LocalPathAdsName = "cloud.lightupon.path";
+        private const string LockAdsName = "cloud.lightupon.lock";
 
         public FileUploadResponse() : base()
         {
         }
 
-        [JsonProperty("end_byte")]
-        public string EndByte { get; set; }
-
         [JsonProperty("guid")]
         public string Guid { get; set; }
-
-        [JsonProperty("md5")]
-        public string Md5 { get; set; }
-
-        public long ModifiedUtc { get; set; }
 
         [JsonProperty("orig_name")]
         public string OriginalName { get; set; }
 
-        [JsonProperty("upload_id")]
-        public string UploadId { get; set; }
-
-        [JsonProperty("upload_time")]
-        public int UploadTime { get; set; }
-
         [JsonProperty("version")]
         public string Version { get; set; }
 
-        public static IEnumerable<byte[]> IterateFileChunks(string filePath)
-        {
-            using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
-            {
-                var buffer = new byte[LightClient.FILE_UPLOAD_CHUNK_SIZE];
-                fileStream.Seek(0, SeekOrigin.Begin);
-                var bytesRead = fileStream.Read(buffer, 0, LightClient.FILE_UPLOAD_CHUNK_SIZE);
+        [JsonProperty("object_key")]
+        public string ObjectKey { get; set; }
 
-                while (bytesRead > 0)
-                {
-                    if (bytesRead < LightClient.FILE_UPLOAD_CHUNK_SIZE)
-                    {
-                        buffer = buffer.Take(bytesRead).ToArray();
+        [JsonProperty("upload_id")]
+        public string UploadId { get; set; }
 
-                        yield return buffer;
-                        break;
-                    }
+        [JsonProperty("end_byte")]
+        public string EndByte { get; set; }
 
-                    yield return buffer;
+        [JsonProperty("md5")]
+        public string Md5 { get; set; }
 
-                    bytesRead = fileStream.Read(buffer, 0, LightClient.FILE_UPLOAD_CHUNK_SIZE);
-                }
-            }
-        }
+        [JsonProperty("upload_time")]
+        public long UploadTime { get; set; }
+
+        [JsonProperty("author_id")]
+        public string UserId { get; set; }
+
+        [JsonProperty("author_name")]
+        public string UserName { get; set; }
+
+        [JsonProperty("author_tel")]
+        public string UserTel { get; set; }
+
+        [JsonProperty("is_locked")]
+        public bool IsLocked { get; set; }
+
+        [JsonProperty("lock_modified_utc")]
+        public string LockModifiedUtc { get; set; }
+
+        [JsonProperty("lock_user_id")]
+        public string LockUserId { get; set; }
+
+        [JsonProperty("lock_user_name")]
+        public string LockUserName { get; set; }
+
+        [JsonProperty("lock_user_tel")]
+        public string LockUserTel { get; set; }
+
+        [JsonProperty("is_deleted")]
+        public bool IsDeleted { get; set; }
+
+        [JsonProperty("bytes")]
+        public long Bytes { get; set; }
+
+        [JsonProperty("width")]
+        public string Width { get; set; }
+
+        [JsonProperty("height")]
+        public string Height { get; set; }
 
         public static IEnumerable<byte[]> IterateFileChunksWithoutFileBlocking(string filePath, Int32 offset)
         {
@@ -118,7 +130,7 @@ namespace LightClient
                     chunkSize = LightClient.FILE_UPLOAD_CHUNK_SIZE;
                 }
 
-                //add cycle do while(FileStrea.Length - FileStream.Position <)
+                //add cycle do while(FileStream.Length - FileStream.Position <)
                 var buffer = new Byte[chunkSize];
                 for (Int32 countReadBytes = 1; countReadBytes > 0; offset += countReadBytes)
                 {
@@ -138,31 +150,6 @@ namespace LightClient
 
                 fileStream.Dispose();
             }
-        }
-
-        public static void TryWriteLastSeenModifiedUtc(string path, long utc)
-        {
-            if (utc == 0) { }
-
-            var fi = new FileInfo(path);
-
-            try
-            {
-                var text = utc.ToString();
-
-                var currentLastWriteUtc = File.GetLastWriteTimeUtc(path);
-
-                var stream = NtfsAlternateStream.Open($"{path}:{LastSeenModifiedUtc}", FileAccess.Write,
-                    FileMode.OpenOrCreate, FileShare.None);
-
-                stream.Close();
-
-                NtfsAlternateStream.WriteAllText($"{path}:{LastSeenModifiedUtc}", text);
-
-                File.SetLastWriteTimeUtc(path, currentLastWriteUtc);
-                Console.WriteLine($"{path} has last seen modified utc {text}");
-            }
-            catch (DirectoryNotFoundException) { }
         }
 
         public string CalculateMd5Hash(string filename)
@@ -219,84 +206,10 @@ namespace LightClient
         {
             var responseStr = $"{nameof(FileUploadResponse)}:\n" +
                 $"{nameof(OriginalName)} = {OriginalName};\n" +
-                $"{nameof(ModifiedUtc)} = {ModifiedUtc};\n" +
+                $"{nameof(UploadTime)} = {UploadTime};\n" +
                 $"{nameof(Guid)} = {Guid}";
 
             return responseStr;
-        }
-
-        public void TryWriteGuidAndLocalPathMarkersIfNotTheSame(string path, string guid)
-        {
-            var fi = new FileInfo(path);//add refactoring to this function
-
-            var guidAdsPath = $"{path}:{GuidAdsName}";
-            var localPathAdsPath = $"{path}:{LocalPathAdsName}";
-
-            string current = "";
-            if (NtfsAlternateStream.Exists($"{path}:{GuidAdsName}"))
-            {
-                current = NtfsAlternateStream.ReadAllText($"{path}:{GuidAdsName}");
-            }
-
-            DateTime currentLastWriteUtc;
-            FileStream stream;
-
-            if (current == guid)
-            {
-                // Update only local path marker if it is needed.
-                string currentLocalPathMarker = "";
-                if (NtfsAlternateStream.Exists($"{path}:{LocalPathAdsName}"))
-                {
-                    currentLocalPathMarker = NtfsAlternateStream.ReadAllText($"{path}:{LocalPathAdsName}");
-                }
-
-                if (currentLocalPathMarker != path)
-                {
-                    currentLastWriteUtc = File.GetLastWriteTimeUtc(path);//try to remove it
-
-                    stream = NtfsAlternateStream.Open(localPathAdsPath, FileAccess.Write, FileMode.OpenOrCreate,
-                        FileShare.None);
-
-                    stream.Close();
-                    NtfsAlternateStream.WriteAllText(localPathAdsPath, ToHexString(path));
-
-                    File.SetLastWriteTimeUtc(path, currentLastWriteUtc);//try to remove it
-                }
-
-                return;
-            }
-
-            try // TODO RR find proper solution here.
-            {
-                if (fi.IsReadOnly)
-                {
-                    File.SetAttributes(path, FileAttributes.Normal);
-                }
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return;
-            }
-
-            currentLastWriteUtc = File.GetLastWriteTimeUtc(path);
-
-            stream = NtfsAlternateStream.Open(guidAdsPath, FileAccess.Write, FileMode.OpenOrCreate, FileShare.None);
-            stream.Close();
-            NtfsAlternateStream.WriteAllText(guidAdsPath, guid);
-
-            // If guid is created - remember original path of the file.
-            stream = NtfsAlternateStream.Open(localPathAdsPath, FileAccess.Write, FileMode.OpenOrCreate,
-                FileShare.None);
-
-            stream.Close();
-
-            var bytes = Encoding.UTF8.GetBytes(path);
-            var hexStringWithDashes = BitConverter.ToString(bytes);
-            var result = hexStringWithDashes.Replace("-", "");
-
-            NtfsAlternateStream.WriteAllText(localPathAdsPath, result);
-
-            File.SetLastWriteTimeUtc(path, currentLastWriteUtc);//maybe this row should be deleted
         }
 
         private string ToHexString(string value)
