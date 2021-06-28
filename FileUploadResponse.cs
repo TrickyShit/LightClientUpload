@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using CodeFluent.Runtime.BinaryServices;
@@ -38,7 +37,7 @@ namespace LightClient
     public class FileUploadResponse : BaseResponse
     {
         private const string GuidAdsName = "cloud.lightupon.guid";
-        private const string LastSeenModifiedUtc = "cloud.lightupon.servermodifiedutc";
+        private const string LastSeenVersion = "cloud.lightupon.lastseenversion";
         private const string LocalPathAdsName = "cloud.lightupon.path";
         private const string LockAdsName = "cloud.lightupon.lock";
 
@@ -221,6 +220,28 @@ namespace LightClient
 
             return result;
         }
+
+        public static void TryWriteLastSeenVersion(FileInfo fi, string version)
+        {
+            if (fi == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var stream = NtfsAlternateStream.Open($"{fi.FullName}:{version}", FileAccess.Write,
+                    FileMode.OpenOrCreate, FileShare.None);
+
+                stream.Close();
+
+                NtfsAlternateStream.WriteAllText($"{fi.FullName}:{LastSeenVersion}", version);
+
+                Console.WriteLine($"{fi.FullName} has last seen version {version}");
+            }
+            catch (DirectoryNotFoundException) { }
+        }
+
     }
 
     internal class ChunkUploadState // TODO Release 2.0 Range for download Range: 65545-

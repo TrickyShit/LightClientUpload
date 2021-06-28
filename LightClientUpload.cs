@@ -13,6 +13,7 @@ namespace LightClient
     public class LightClient
     {
         public const Int32 FILE_UPLOAD_CHUNK_SIZE = 2000000;    //Max size of fileparts
+        private string version;
 
         public LightClient()
         {
@@ -31,7 +32,7 @@ namespace LightClient
             var requestUri = Combine(host, "riak", "upload", bucket_id);
             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
             var timeStamp = ((int)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
-            var version = IncrementVersion(user_id, timeStamp);
+            version = IncrementVersion(user_id, timeStamp);
             var fileInfo = new FileInfo(fullPath);
 
             var chunkUploadState = new ChunkUploadState
@@ -143,8 +144,8 @@ namespace LightClient
 
                     HttpResponseMessage response = await ServerUploadResponse(multipartFormData, token, uploadState,
                                                                                      currentLocalMd5, fileInfo);
-                    var responseGetGuid = JsonConvert.DeserializeObject<FileUploadResponse>(
-                                await response.Content.ReadAsStringAsync());
+                    var str = await response.Content.ReadAsStringAsync();
+                    var responseGetGuid = JsonConvert.DeserializeObject<FileUploadResponse>(str);
 
                     if (!responseGetGuid.IsSuccess)
                         return response;
@@ -266,8 +267,7 @@ namespace LightClient
                     {
                         try
                         {
-                            uploadState.LastResponse = JsonConvert.DeserializeObject<FileUploadResponse>(
-                                await responseContent.ReadAsStringAsync());
+                            uploadState.LastResponse = JsonConvert.DeserializeObject<FileUploadResponse>(json);
                         }
                         catch (Exception ex)
                         {
@@ -285,10 +285,7 @@ namespace LightClient
 
                         if (uploadState.IsLastChunk)
                         {
-                            var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fileInfo.FullName);
-                            var timeStamp = ((int)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds);
-
-                            //FileUploadResponse.TryWriteLastSeenModifiedUtc(fileInfo.FullName, (long)timeStamp);
+                            FileUploadResponse.TryWriteLastSeenVersion(fileInfo, version);
 
                             var message = $"File {fileInfo.FullName} was uploaded";
                             Console.WriteLine(message);
