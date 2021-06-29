@@ -27,18 +27,18 @@ namespace LightClient
         //filePrefix - prefix from server, need if file located in the subdirectory, else ""
         //guid - file identificator from server
 
-        public async Task<HttpResponseMessage> Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string guid = "")
+        public async Task<HttpResponseMessage> Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string lastseenversion = "")
         {
             var requestUri = Combine(host, "riak", "upload", bucket_id);
             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
             var timeStamp = ((int)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
-            version = IncrementVersion(user_id, timeStamp);
+            version = IncrementVersion(user_id, timeStamp, lastseenversion);
             var fileInfo = new FileInfo(fullPath);
 
             var chunkUploadState = new ChunkUploadState
             {
                 ChunkRequestUri = requestUri,
-                Guid = guid,
+                Guid = "",
                 IsLastChunk = fileInfo.Length < FILE_UPLOAD_CHUNK_SIZE,
                 IsFirstChunk = true
             };
@@ -49,11 +49,6 @@ namespace LightClient
                     {"version", version},
                     {"hex_prefix", filePrefix},
                 };
-
-            if (!string.IsNullOrEmpty(guid))
-            {
-                uploadParams.Add("guid", guid);
-            }
 
             return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams, filePrefix);
         }
@@ -220,8 +215,6 @@ namespace LightClient
             bytemd5.Headers.ContentMD5 = Convert.FromBase64String(md5OfChunk);
             multiPartContent.Add(bytemd5, "files[]", fileInfo.Name);
 
-            //var md5OfFullFile = fileUploadResponse.CalculateMd5Hash(fileInfo.FullName);
-            //multiPartContent.Headers.ContentMD5 = Convert.FromBase64String(md5OfFullFile);
             multiPartContent.Add(new StringContent(md5OfChunk), "md5");
 
             var endByte = AddContentRange(multiPartContent, uploadState, fileInfo);    //add ContentRange
