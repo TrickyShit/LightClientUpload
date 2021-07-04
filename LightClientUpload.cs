@@ -60,7 +60,7 @@ namespace LightClient
                             ? fileInfo.Length - 1
                             : (uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE - 1;
             if (size > 0)
-                content.Headers.Add("content-range", $"bytes {uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE}-{endByte}{@"/"}{size}");
+                content.Headers.Add("content-range", $"bytes {uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE}-{endByte}{@"/"}{fileInfo.Length}");
             else
                 content.Headers.TryAddWithoutValidation("content-range", $"bytes {0}-{0}{@"/"}{size}");
 
@@ -170,7 +170,8 @@ namespace LightClient
 
 
                 multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
-                                                        uploadParams, fileInfo);
+                                                        uploadParams, fileInfo, currentPlainBytes);
+                multipartFormData.Add(new StringContent(uploadState.PartNumber.ToString()), "part_number");
 
                 HttpResponseMessage responseChunkUpload;
                 responseChunkUpload = await ServerUploadResponse(multipartFormData, token, uploadState,
@@ -179,13 +180,13 @@ namespace LightClient
                 var responseGet = JsonConvert.DeserializeObject<FileUploadResponse>(st);
 
 
-                if (!(responseChunkUpload.StatusCode is (HttpStatusCode)206))
-                {
-                    multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
-                                                         uploadParams, fileInfo, currentPlainBytes);
-                    responseChunkUpload = await ServerUploadResponse(multipartFormData, token, uploadState,
-                                                            currentLocalMd5, fileInfo);
-                }
+                //if (!(responseChunkUpload.StatusCode is (HttpStatusCode)206))
+                //{
+                //    multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
+                //                                         uploadParams, fileInfo, currentPlainBytes);
+                //    responseChunkUpload = await ServerUploadResponse(multipartFormData, token, uploadState,
+                //                                            currentLocalMd5, fileInfo);
+                //}
 
 
                 if (uploadState.IsFirstChunk)
@@ -220,15 +221,10 @@ namespace LightClient
             var boundary = "-----" + DateTime.Now.Ticks.ToString("x");
             var multiPartContent = new MultipartFormDataContent(boundary);
 
-            //In a normal HTTP response, the Content-Disposition header is an indication that the expected response content will be displayed in the browser as a web page or part of a web page, or as an attachment that can then be downloaded and saved locally.
-            //multiPartContent.Headers.TryAddWithoutValidation("Content-Type", "multipart/mixed; boundary=" + boundary);
+            //In a normal HTTP response, the Content-Disposition header is an indication that the expected response content will be displayed in the browser
+            //as a web page or part of a web page, or as an attachment that can then be downloaded and saved locally.
 
-            //multiPartContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
-            //{
-            //    Name = "files[]",
-            //    FileName = fileInfo.Name,
-            //    Size = fileInfo.Length
-            //};
+
 
             foreach (var param in uploadParams)
             {
@@ -239,23 +235,34 @@ namespace LightClient
 
             if (bytes == null)
             {
+                multiPartContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
+                {
+                    Name = "files[]",
+                    FileName = fileInfo.Name,
+                    Size = fileInfo.Length
+                };
+
                 bytes = new byte[1];
                 bytes[0] = 0;
                 bytemd5 = new ByteArrayContent(bytes);
-                multiPartContent.Add(new StringContent(fileInfo.Name), "files[]");
-                //multiPartContent.Add(new StringContent(md5OfChunk), "md5");
-                multiPartContent.Add(null, "files[]", fileInfo.Name);
-                AddContentRange(multiPartContent, uploadState, fileInfo, false);    //add ContentRange
+                multiPartContent.Add(bytemd5, "files[]", fileInfo.Name);
+                multiPartContent.Add(new StringContent(md5OfChunk), "md5");
+                AddContentRange(multiPartContent, uploadState, fileInfo, false);
             }
             else
             {
+                multiPartContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
+                {
+                    Name = "files[]",
+                    FileName = fileInfo.Name,
+                    Size = fileInfo.Length
+                };
                 bytemd5 = new ByteArrayContent(bytes);
                 bytemd5.Headers.ContentMD5 = Convert.FromBase64String(md5OfChunk);
                 multiPartContent.Add(bytemd5, "files[]", fileInfo.Name);
                 multiPartContent.Add(new StringContent(md5OfChunk), "md5");
-                AddContentRange(multiPartContent, uploadState, fileInfo);    //add ContentRange
+                AddContentRange(multiPartContent, uploadState, fileInfo);
             }
-
 
             if (uploadState.IsLastChunk)
             {
