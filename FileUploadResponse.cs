@@ -151,19 +151,6 @@ namespace LightClient
             }
         }
 
-        public string CalculateMd5Hash(string filename)
-        {
-            using (MD5 md5Hash = MD5.Create())
-            {
-                var sb = new StringBuilder();
-                foreach (var data in md5Hash.ComputeHash(File.ReadAllBytes(filename)))
-                {
-                    sb.Append(data.ToString("x2"));
-                }
-                return sb.ToString();
-            }
-        }
-
         public string CalculateMd5Hash(byte[] filename)
         {
             using (MD5 md5Hash = MD5.Create())
@@ -221,6 +208,83 @@ namespace LightClient
             return result;
         }
 
+        public static void TryWriteGuidAndLocalPathMarkersIfNotTheSame(FileInfo fi, string guid)
+        {
+            if (fi == null)
+            {
+                return;
+            }
+
+            var path = fi.FullName;
+
+            var bytes = Encoding.UTF8.GetBytes(path);
+            var hexStringWithDashes = BitConverter.ToString(bytes);
+            var hex_path = hexStringWithDashes.Replace("-", "");
+
+            var guidAdsPath = $"{path}:{GuidAdsName}";
+            var localPathAdsPath = $"{path}:{LocalPathAdsName}";
+
+            string current = "";
+            if (NtfsAlternateStream.Exists($"{path}:{GuidAdsName}"))
+                 current = NtfsAlternateStream.ReadAllText($"{path}:{GuidAdsName}");
+
+            DateTime currentLastWriteUtc;
+            FileStream stream;
+
+            if (current == guid)
+            {
+                // Update only local path marker if it is needed.
+                string currentLocalPathMarker = "";
+                if (NtfsAlternateStream.Exists($"{path}:{LocalPathAdsName}"))
+                     currentLocalPathMarker = NtfsAlternateStream.ReadAllText($"{path}:{LocalPathAdsName}");
+
+                if (currentLocalPathMarker != path)
+                {
+                    //currentLastWriteUtc = File.GetLastWriteTimeUtc(path);//try to remove it
+
+                    stream = NtfsAlternateStream.Open(localPathAdsPath, FileAccess.Write, FileMode.OpenOrCreate,
+                        FileShare.None);
+
+                    stream.Close();
+
+
+                    NtfsAlternateStream.WriteAllText(localPathAdsPath, hex_path);
+
+                    //File.SetLastWriteTimeUtc(path, currentLastWriteUtc);//try to remove it
+                }
+
+                return;
+            }
+
+            try // TODO RR find proper solution here.
+            {
+                if (fi.IsReadOnly)
+                {
+                    File.SetAttributes(path, FileAttributes.Normal);
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
+            }
+
+            currentLastWriteUtc = File.GetLastWriteTimeUtc(path);
+
+            stream = NtfsAlternateStream.Open(guidAdsPath, FileAccess.Write, FileMode.OpenOrCreate, FileShare.None);
+            stream.Close();
+            NtfsAlternateStream.WriteAllText(guidAdsPath, guid);
+
+            // If guid is created - remember original path of the file.
+            stream = NtfsAlternateStream.Open(localPathAdsPath, FileAccess.Write, FileMode.OpenOrCreate,
+                FileShare.None);
+
+            stream.Close();
+
+            NtfsAlternateStream.WriteAllText(localPathAdsPath, hex_path);
+
+            //File.SetLastWriteTimeUtc(path, currentLastWriteUtc);//maybe this row should be deleted
+        }
+
         public static void TryWriteLastSeenVersion(FileInfo fi, string version)
         {
             if (fi == null)
@@ -241,7 +305,6 @@ namespace LightClient
             }
             catch (DirectoryNotFoundException) { }
         }
-
     }
 
     internal class ChunkUploadState // TODO Release 2.0 Range for download Range: 65545-
