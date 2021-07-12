@@ -167,78 +167,89 @@ namespace LightClient
             MultipartFormDataContent multipartFormData;
             HttpResponseMessage response;
 
-            foreach (var currentPlainBytes in FileUploadResponse.IterateFileChunksWithoutFileBlocking(fullPath, offset: 0))
+            try
             {
-                var currentLocalMd5 = fileUploadResponse.CalculateMd5Hash(currentPlainBytes);
-                calculatedMd5S.Add(currentLocalMd5);
-
-                if (currentPlainBytes.Length < FILE_UPLOAD_CHUNK_SIZE)
-                    uploadState.IsLastChunk = true;
-
-                var percents = uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE / (double)fileInfo.Length;
-                Console.WriteLine($"Upload part[{uploadState.PartNumber}] for file {fileInfo.Name}. Uploaded {percents:P2}");
-
-                if (uploadState.IsFirstChunk && !uploadParams.ContainsKey("guid"))
+                foreach (var currentPlainBytes in FileUploadResponse.IterateFileChunksWithoutFileBlocking(fullPath, offset: 0))
                 {
+                    var currentLocalMd5 = fileUploadResponse.CalculateMd5Hash(currentPlainBytes);
+                    calculatedMd5S.Add(currentLocalMd5);
+
+                    if (currentPlainBytes.Length < FILE_UPLOAD_CHUNK_SIZE)
+                        uploadState.IsLastChunk = true;
+
+                    var percents = uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE / (double)fileInfo.Length;
+                    Console.WriteLine($"Upload part[{uploadState.PartNumber}] for file {fileInfo.Name}. Uploaded {percents:P2}");
+
+                    if (uploadState.IsFirstChunk && !uploadParams.ContainsKey("guid"))
+                    {
+                        multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
+                                                                 uploadParams, fileInfo, currentPlainBytes);
+
+                        response = await ServerUploadResponse(multipartFormData, token, uploadState,
+                                                                                        currentLocalMd5, fileInfo);
+
+                        var str = await response.Content.ReadAsStringAsync();
+                        var responseGetGuid = JsonConvert.DeserializeObject<FileUploadResponse>(str);
+
+                        if (!responseGetGuid.IsSuccess)
+                            return response;
+
+                        Console.WriteLine($"Response {responseGetGuid.Guid} is recieved for first request");
+                        uploadParams.Add("guid", uploadState.LastResponse.Guid);
+
+                        FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo, uploadState.LastResponse.Guid);  // - this is logic for download, not upload
+
+                        //if (fileInfo.Length <= FILE_UPLOAD_CHUNK_SIZE)   //If file < 2000000 bytes then first request = upload to server
+                        //    return response;
+
+                        uploadState.IsFirstChunk = false;
+                        Console.WriteLine($"Response {responseGetGuid.UploadId} is recieved for part number = {uploadState.PartNumber}");
+                    }
+
+                    if (uploadState.LastResponse?.UploadId != null)
+                        uploadState.ChunkRequestUri = $"{baseRequestUrl}{uploadState.LastResponse.UploadId}/{uploadState.PartNumber + 1}/";
+
                     multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
-                                                             uploadParams, fileInfo, currentPlainBytes);
+                                                            uploadParams, fileInfo);
+                    //multipartFormData.Add(new StringContent(uploadState.PartNumber.ToString()), "part_number");
 
                     response = await ServerUploadResponse(multipartFormData, token, uploadState,
-                                                                                    currentLocalMd5, fileInfo);
+                       currentLocalMd5, fileInfo);
+                    var st = await response.Content.ReadAsStringAsync();
+                    var responseGet = JsonConvert.DeserializeObject<FileUploadResponse>(st);
 
-                    var str = await response.Content.ReadAsStringAsync();
-                    var responseGetGuid = JsonConvert.DeserializeObject<FileUploadResponse>(str);
+                    if (response.StatusCode is (HttpStatusCode)206)
+                    {
+                        if (uploadState.IsLastChunk)
+                            return response;
+                        else
+                            uploadState.IncreasePartNumber();
 
-                    if (!responseGetGuid.IsSuccess)
-                        return response;
+                        continue;
+                    }
 
-                    Console.WriteLine($"Response {responseGetGuid.Guid} is recieved for first request");
-                    uploadParams.Add("guid", uploadState.LastResponse.Guid);
+                    multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
+                                         uploadParams, fileInfo, currentPlainBytes);
+                    response = await ServerUploadResponse(multipartFormData, token, uploadState,
+                                                            currentLocalMd5, fileInfo);
 
-                    FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo, uploadState.LastResponse.Guid);  // - this is logic for download, not upload
-
-                    //if (fileInfo.Length <= FILE_UPLOAD_CHUNK_SIZE)   //If file < 2000000 bytes then first request = upload to server
-                    //    return response;
-
-                    uploadState.IsFirstChunk = false;
-                    Console.WriteLine($"Response {responseGetGuid.UploadId} is recieved for part number = {uploadState.PartNumber}");
-                }
-
-                if (uploadState.LastResponse?.UploadId != null)
-                    uploadState.ChunkRequestUri = $"{baseRequestUrl}{uploadState.LastResponse.UploadId}/{uploadState.PartNumber + 1}/";
-
-                multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
-                                                        uploadParams, fileInfo);
-                //multipartFormData.Add(new StringContent(uploadState.PartNumber.ToString()), "part_number");
-
-                response = await ServerUploadResponse(multipartFormData, token, uploadState,
-                   currentLocalMd5, fileInfo);
-                var st = await response.Content.ReadAsStringAsync();
-                var responseGet = JsonConvert.DeserializeObject<FileUploadResponse>(st);
-
-                if (response.StatusCode is (HttpStatusCode)206)
-                {
                     if (uploadState.IsLastChunk)
                         return response;
-                    else
-                        uploadState.IncreasePartNumber();
 
-                    continue;
+                    uploadState.IncreasePartNumber();
+
+                    var responseIfChanged = fileUploadResponse.ResponseIfChangedWhileUploadFile(fullPath, File.GetLastWriteTimeUtc(fullPath));
+                    if (!responseIfChanged.IsSuccess)
+                        return response;
                 }
-
-                multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
-                                     uploadParams, fileInfo, currentPlainBytes);
-                response = await ServerUploadResponse(multipartFormData, token, uploadState,
-                                                        currentLocalMd5, fileInfo);
-
-                if (uploadState.IsLastChunk)
-                    return response;
-
-                uploadState.IncreasePartNumber();
-
-                var responseIfChanged = fileUploadResponse.ResponseIfChangedWhileUploadFile(fullPath, File.GetLastWriteTimeUtc(fullPath));
-                if (!responseIfChanged.IsSuccess)
-                    return response;
+            }
+            catch (FileNotFoundException)
+            {
+                var errorResponse = new System.Net.Http.HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.NotFound
+                };
+                return errorResponse;
             }
             return new HttpResponseMessage();     //not used anyway
         }
