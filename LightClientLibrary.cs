@@ -4,6 +4,8 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading.Tasks;
 using LUC.DVVSet;
 using Newtonsoft.Json;
@@ -18,6 +20,47 @@ namespace LightClient
         public LightClient()
         {
         }
+
+        public async Task<HttpResponseMessage> LoginAsync(string login, string password, string host)
+        {
+            try
+            {
+                using (var client = new HttpClient())
+                {
+                    var stringContent = JsonConvert.SerializeObject(new LoginRequest
+                    {
+                        Login = login,
+                        Password = password
+                    });
+
+                    var content = new StringContent(stringContent, Encoding.UTF8, "application/json");
+                    var loginUri = Combine(host, "riak", "login");
+
+                    var request = await client.PostAsync(loginUri, content);
+
+                    return request;
+                }
+            }
+            catch (HttpRequestException)
+            {
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.BadRequest
+                };
+            }
+            catch (WebException)
+            {
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.BadRequest
+                };
+            }
+            catch (SocketException)
+            {
+                return new HttpResponseMessage { StatusCode = HttpStatusCode.BadRequest };
+            }
+        }
+
 
         //Host - server Url. Example - https://lightupon.cloud
         //Token - authorization token from server. Example - "647c7fde-936c-447a-8640-55dc8c1c69cb"

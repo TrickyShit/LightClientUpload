@@ -34,6 +34,16 @@ namespace LightClient
         public string Message { get; set; }
     }
 
+    public class LoginRequest
+    {
+        [JsonProperty("login")]
+        public string Login { get; set; }
+
+        [JsonProperty("password")]
+        public string Password { get; set; }
+    }
+
+
     public class FileUploadResponse : BaseResponse
     {
         private const string GuidAdsName = "cloud.lightupon.guid";
