@@ -14,12 +14,9 @@ namespace LightClient
 {
     public class LightClient
     {
-        public const Int32 FILE_UPLOAD_CHUNK_SIZE = 2000000;    //Max size of fileparts
+        public const int FILE_UPLOAD_CHUNK_SIZE = 2000000;    //Max size of fileparts
         private string version;
-
-        public LightClient()
-        {
-        }
+        public string Host;
 
         public async Task<HttpResponseMessage> LoginAsync(string login, string password, string host)
         {
@@ -43,17 +40,11 @@ namespace LightClient
             }
             catch (HttpRequestException)
             {
-                return new HttpResponseMessage
-                {
-                    StatusCode = HttpStatusCode.BadRequest
-                };
+                return new HttpResponseMessage { StatusCode = HttpStatusCode.BadRequest };
             }
             catch (WebException)
             {
-                return new HttpResponseMessage
-                {
-                    StatusCode = HttpStatusCode.BadRequest
-                };
+                return new HttpResponseMessage { StatusCode = HttpStatusCode.BadRequest };
             }
             catch (SocketException)
             {
@@ -72,6 +63,7 @@ namespace LightClient
 
         public async Task<HttpResponseMessage> Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string lastseenversion = "")
         {
+            Host = host;
             var requestUri = Combine(host, "riak", "upload", bucket_id);
             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
             var timeStamp = ((int)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
@@ -90,7 +82,7 @@ namespace LightClient
                 {
                     {"user_id", user_id},
                     {"version", version},
-                    {"hex_prefix", filePrefix},
+                    {"prefix", filePrefix.Remove(filePrefix.Length - 1)},
                 };
 
             return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams, filePrefix);
@@ -240,7 +232,7 @@ namespace LightClient
                         Console.WriteLine($"Response {responseGetGuid.Guid} is recieved for first request");
                         uploadParams.Add("guid", uploadState.LastResponse.Guid);
 
-                        FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo, uploadState.LastResponse.Guid);  // - this is logic for download, not upload
+                        FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo, uploadState.LastResponse.Guid);
 
                         //if (fileInfo.Length <= FILE_UPLOAD_CHUNK_SIZE)   //If file < 2000000 bytes then first request = upload to server
                         //    return response;
@@ -305,7 +297,7 @@ namespace LightClient
             ServicePointManager.Expect100Continue = true;   //try to get response 100 from server
             using (var httpClient = new HttpClient())
             {
-                httpClient.BaseAddress = new Uri(uploadState.ChunkRequestUri);
+                httpClient.BaseAddress = new Uri(Host);
                 httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", token);
 
                 httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));

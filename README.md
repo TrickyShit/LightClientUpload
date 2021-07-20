@@ -18,5 +18,8 @@ Method contains a vector version clock (DVVSet), so we can solve a various confl
 Files with size more than 2000000 bytes split into parts and uploads.  
 
 Documentation for work with RIAK-server:  
-https://github.com/lightuponcloud/dubstack/blob/master/API.md  
+https://github.com/lightuponcloud/dubstack/blob/master/API.md
+
+Source code:
+https://github.com/TrickyShit/LightClientUpload  
 
