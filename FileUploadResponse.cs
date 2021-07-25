@@ -8,33 +8,17 @@ using Newtonsoft.Json;
 
 namespace LightClient
 {
-    public interface INotificationResult
-    {
-        bool IsSuccess { get; set; }
-
-        string Message { get; set; }
-    }
-
-    public abstract class BaseResponse : INotificationResult
+    internal abstract class BaseResponse
     {
         public BaseResponse()
         {
         }
 
-        public BaseResponse(bool isSuccess, bool isForbidden, string message)
-        {
-            IsSuccess = isSuccess;
-            IsForbidden = isForbidden;
-            Message = message;
-        }
-
-        public bool IsForbidden { get; set; } = false;
         public bool IsSuccess { get; set; } = true;
-
         public string Message { get; set; }
     }
 
-    public class LoginRequest
+    internal class LoginRequest
     {
         [JsonProperty("login")]
         public string Login { get; set; }
@@ -44,7 +28,7 @@ namespace LightClient
     }
 
 
-    public class FileUploadResponse : BaseResponse
+    internal class FileUploadResponse : BaseResponse
     {
         private const string GuidAdsName = "cloud.lightupon.guid";
         private const string LastSeenVersion = "cloud.lightupon.lastseenversion";
@@ -174,13 +158,13 @@ namespace LightClient
             }
         }
 
-        public FileUploadResponse ResponseIfChangedWhileUploadFile(String fullPath, DateTime originalModifiedDateTime)
+        public FileUploadResponse ResponseIfChangedWhileUploadFile(string fullPath, DateTime originalModifiedDateTime)
         {
             var currentModifiedDateTime = /*DateTimeExtensions.LastWriteTimeUtcWithCorrectOffset*/File.GetLastWriteTimeUtc(fullPath);
 
             if (originalModifiedDateTime != currentModifiedDateTime)
             {
-                String message = $"Upload is stopped. File {fullPath} was changed just during uploading process.";
+                string message = $"Upload is stopped. File {fullPath} was changed just during uploading process.";
                 Console.WriteLine(message);
 
                 return new FileUploadResponse
@@ -196,26 +180,6 @@ namespace LightClient
                     IsSuccess = true
                 };
             }
-        }
-
-        public override string ToString()
-        {
-            var responseStr = $"{nameof(FileUploadResponse)}:\n" +
-                $"{nameof(OriginalName)} = {OriginalName};\n" +
-                $"{nameof(UploadTime)} = {UploadTime};\n" +
-                $"{nameof(Guid)} = {Guid}";
-
-            return responseStr;
-        }
-
-        private string ToHexString(string value)
-        {
-            var bytes = Encoding.UTF8.GetBytes(value);
-
-            var hexStringWithDashes = BitConverter.ToString(bytes);
-            var result = hexStringWithDashes.Replace("-", "");
-
-            return result;
         }
 
         public static void TryWriteGuidAndLocalPathMarkersIfNotTheSame(FileInfo fi, string guid)

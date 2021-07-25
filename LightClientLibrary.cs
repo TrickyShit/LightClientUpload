@@ -12,12 +12,28 @@ using Newtonsoft.Json;
 
 namespace LightClient
 {
+    /// <summary>
+    /// Main class
+    /// </summary>
     public class LightClient
     {
-        public const int FILE_UPLOAD_CHUNK_SIZE = 2000000;    //Max size of fileparts
+        /// <summary>
+        /// If this size is exceeded, the file will be split into parts
+        /// </summary>
+        public const int FILE_UPLOAD_CHUNK_SIZE = 2000000;
         private string version;
+        /// <summary>
+        /// Server Url
+        /// </summary>
         public string Host;
 
+        /// <summary>
+        /// Provides authorization to server with login, password and Url of server
+        /// </summary>
+        /// <param name="login">Login for authorization to server</param>
+        /// <param name="password">Password for authorization to server</param>
+        /// <param name="host">Server Url</param>
+        /// <returns>HttpResponseMessage from server</returns>
         public async Task<HttpResponseMessage> LoginAsync(string login, string password, string host)
         {
             try
@@ -53,17 +69,21 @@ namespace LightClient
         }
 
 
-        //Host - server Url. Example - https://lightupon.cloud
-        //Token - authorization token from server. Example - "647c7fde-936c-447a-8640-55dc8c1c69cb"
-        //User_id - identificator from server. Example - "03a3a647d7e65013f515b16b1d9225b6"
-        //bucket_id - bucket from server. Example - "the-integrationtests-integration1-res"
-        //fullPath - full path to the file
-        //filePrefix - prefix from server, need if file located in the subdirectory, else ""
-        //guid - file identificator from server
-
+        /// <summary>
+        /// Uploads file to server.
+        /// </summary>
+        /// <param name = "host" > Server Url.</param>
+        /// <param name = "token" > Authorization token from server.</param> 
+        /// <param name = "user_id" > User identificator from server.</param>
+        /// <param name = "bucket_id"> Bucket from server.</param>
+        /// <param name = "fullPath"> Full path to the file</param>
+        /// <param name = "filePrefix"> Prefix from server, need if file located in the subdirectory, can be empty</param>
+        /// <param name = "lastseenversion"> Vector clock version from server (optional parameter)</param>
+        /// <returns>HttpResponseMessage from server</returns>
         public async Task<HttpResponseMessage> Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string lastseenversion = "")
         {
             Host = host;
+            if (filePrefix.EndsWith("/")) filePrefix = filePrefix.Remove(filePrefix.Length - 1);
             var requestUri = Combine(host, "riak", "upload", bucket_id);
             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
             var timeStamp = ((int)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
@@ -82,7 +102,7 @@ namespace LightClient
                 {
                     {"user_id", user_id},
                     {"version", version},
-                    {"prefix", filePrefix.Remove(filePrefix.Length - 1)},
+                    {"prefix", filePrefix},
                 };
 
             return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams, filePrefix);
@@ -275,7 +295,7 @@ namespace LightClient
             }
             catch (FileNotFoundException)
             {
-                var errorResponse = new System.Net.Http.HttpResponseMessage
+                var errorResponse = new HttpResponseMessage
                 {
                     StatusCode = HttpStatusCode.NotFound
                 };
@@ -284,12 +304,12 @@ namespace LightClient
             return new HttpResponseMessage();     //not used anyway
         }
 
-        private async Task<HttpResponseMessage> ServerUploadResponse(MultipartFormDataContent multipartContent, string token, ChunkUploadState uploadState,
-    string currentLocalMd5, FileInfo fileInfo)
+        private async Task<HttpResponseMessage> ServerUploadResponse(MultipartFormDataContent multipartContent,
+                                                                     string token, ChunkUploadState uploadState,
+                                                                     string currentLocalMd5, FileInfo fileInfo)
         {
             HttpResponseMessage httpResponse = new HttpResponseMessage();
 
-            ServicePointManager.Expect100Continue = true;   //try to get response 100 from server
             using (var httpClient = new HttpClient())
             {
                 httpClient.BaseAddress = new Uri(Host);

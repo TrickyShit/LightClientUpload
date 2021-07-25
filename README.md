@@ -11,15 +11,14 @@ HttpResponseMessage response = await lightClient.Upload(string host, string toke
         bucket_id - bucket from server. Example - "the-integrationtests-integration1-res"
         fullPath - full path to the file
         filePrefix - prefix from server, need if file located in the subdirectory, else ""
-        guid - file identificator from server
-        
+        lastseenversion - vector clock version from server (optional parameter)
+
 Method contains a vector version clock (DVVSet), so we can solve a various conflicts with a many versions of uploading files, for example.  
 
 Files with size more than 2000000 bytes split into parts and uploads.  
 
 Documentation for work with RIAK-server:  
-https://github.com/lightuponcloud/dubstack/blob/master/API.md
+<https://github.com/lightuponcloud/dubstack/blob/master/API.md>
 
 Source code:
-https://github.com/TrickyShit/LightClientUpload  
-
+<https://github.com/TrickyShit/LightClientUpload>  
