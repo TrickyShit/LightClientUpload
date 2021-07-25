@@ -218,7 +218,7 @@ namespace LightClient
                     if (uploadState.IsFirstChunk && !uploadParams.ContainsKey("guid"))
                     {
                         multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
-                                                                 uploadParams, fileInfo, currentPlainBytes);
+                                                                 uploadParams, fileInfo);
 
                         response = await ServerUploadResponse(multipartFormData, token, uploadState,
                                                                                         currentLocalMd5, fileInfo);
@@ -228,6 +228,16 @@ namespace LightClient
 
                         if (!responseGetGuid.IsSuccess)
                             return response;
+
+                        if (response.StatusCode is (HttpStatusCode)206)
+                        {
+                            if (uploadState.IsLastChunk)
+                                return response;
+                            else
+                                uploadState.IncreasePartNumber();
+
+                            continue;
+                        }
 
                         Console.WriteLine($"Response {responseGetGuid.Guid} is recieved for first request");
                         uploadParams.Add("guid", uploadState.LastResponse.Guid);
@@ -245,28 +255,13 @@ namespace LightClient
                         uploadState.ChunkRequestUri = $"{baseRequestUrl}{uploadState.LastResponse.UploadId}/{uploadState.PartNumber + 1}/";
 
                     multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
-                                                            uploadParams, fileInfo);
+                                                            uploadParams, fileInfo, currentPlainBytes);
                     //multipartFormData.Add(new StringContent(uploadState.PartNumber.ToString()), "part_number");
 
                     response = await ServerUploadResponse(multipartFormData, token, uploadState,
                        currentLocalMd5, fileInfo);
                     var st = await response.Content.ReadAsStringAsync();
                     var responseGet = JsonConvert.DeserializeObject<FileUploadResponse>(st);
-
-                    if (response.StatusCode is (HttpStatusCode)206)
-                    {
-                        if (uploadState.IsLastChunk)
-                            return response;
-                        else
-                            uploadState.IncreasePartNumber();
-
-                        continue;
-                    }
-
-                    multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
-                                         uploadParams, fileInfo, currentPlainBytes);
-                    response = await ServerUploadResponse(multipartFormData, token, uploadState,
-                                                            currentLocalMd5, fileInfo);
 
                     if (uploadState.IsLastChunk)
                         return response;
