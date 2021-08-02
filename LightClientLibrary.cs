@@ -83,8 +83,12 @@ namespace LightClient
         public async Task<HttpResponseMessage> Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string lastseenversion = "")
         {
             Host = host;
+            string requestUri;
             if (filePrefix.EndsWith("/")) filePrefix = filePrefix.Remove(filePrefix.Length - 1);
-            var requestUri = Combine(host, "riak", "upload", bucket_id);
+            if (filePrefix == "")
+                requestUri = Combine(host, "riak", "upload", bucket_id);
+            else
+                requestUri = Combine(host, "riak", "upload", bucket_id, "?prefix=" + filePrefix);
             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
             var timeStamp = ((int)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
             version = IncrementVersion(user_id, timeStamp, lastseenversion);
@@ -102,10 +106,9 @@ namespace LightClient
                 {
                     {"user_id", user_id},
                     {"version", version},
-                    {"prefix", filePrefix},
                 };
 
-            return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams, filePrefix);
+            return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams);
         }
 
         internal long AddContentRange(MultipartFormDataContent content, ChunkUploadState uploadState, FileInfo fileInfo)
@@ -144,6 +147,7 @@ namespace LightClient
             result += uri[0] + "/";
             for (var i = 1; i < uri.Length; i++)
             {
+                if (uri[i] == "") continue;
                 uri[i] = uri[i].TrimStart('/');
                 uri[i] = uri[i].TrimEnd('/');
                 result += uri[i] + "/";
@@ -213,7 +217,7 @@ namespace LightClient
         }
 
         private async Task<HttpResponseMessage> ResponseOfIterativelyUploadFile(FileInfo fileInfo, string token, ChunkUploadState uploadState,
-                                                                                       Dictionary<string, string> uploadParams, string filePrefix)
+                                                                                       Dictionary<string, string> uploadParams)
         {
             var fileUploadResponse = new FileUploadResponse();
             string fullPath = fileInfo.FullName;
