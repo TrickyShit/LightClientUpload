@@ -201,17 +201,17 @@ namespace LightClient
             multiPartContent.Add(new StringContent(md5OfChunk), "md5");
             AddContentRange(multiPartContent, uploadState, fileInfo);
 
-            if (uploadState.IsLastChunk)
-            {
-                AddETags(multiPartContent, calculatedMd5S);
+            if (!uploadState.IsLastChunk || bytes.Length == 0)
+                return multiPartContent;
 
-                var i = 0;
-                Console.WriteLine("Last lap!");
-                foreach (var calculatedItemMd5 in calculatedMd5S)
-                {
-                    Console.WriteLine($"Chunk: {i} - md5 {calculatedItemMd5}");
-                    i++;
-                }
+            AddETags(multiPartContent, calculatedMd5S);
+
+            var i = 0;
+            Console.WriteLine("Last lap!");
+            foreach (var calculatedItemMd5 in calculatedMd5S)
+            {
+                Console.WriteLine($"Chunk: {i} - md5 {calculatedItemMd5}");
+                i++;
             }
             return multiPartContent;
         }
@@ -239,8 +239,11 @@ namespace LightClient
                     var percents = uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE / (double)fileInfo.Length;
                     Console.WriteLine($"Upload part[{uploadState.PartNumber}] for file {fileInfo.Name}. Uploaded {percents:P2}");
 
-                    if (uploadState.IsFirstChunk && !uploadParams.ContainsKey("guid"))
+                    if (uploadParams.ContainsKey("guid"))
                     {
+                        if (uploadState.LastResponse?.UploadId != null)
+                            uploadState.ChunkRequestUri = $"{baseRequestUrl}{uploadState.LastResponse.UploadId}/{uploadState.PartNumber + 1}/";
+
                         multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
                                                                  uploadParams, fileInfo);
 
@@ -263,16 +266,12 @@ namespace LightClient
                             continue;
                         }
 
-                        Console.WriteLine($"Response {responseGetGuid.Guid} is recieved for first request");
-                        uploadParams.Add("guid", uploadState.LastResponse.Guid);
 
                         FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo, uploadState.LastResponse.Guid);
 
                         //if (fileInfo.Length <= FILE_UPLOAD_CHUNK_SIZE)   //If file < 2000000 bytes then first request = upload to server
                         //    return response;
 
-                        uploadState.IsFirstChunk = false;
-                        Console.WriteLine($"Response {responseGetGuid.UploadId} is recieved for part number = {uploadState.PartNumber}");
                     }
 
                     if (uploadState.LastResponse?.UploadId != null)
@@ -286,6 +285,16 @@ namespace LightClient
                        currentLocalMd5, fileInfo);
                     var st = await response.Content.ReadAsStringAsync();
                     var responseGet = JsonConvert.DeserializeObject<FileUploadResponse>(st);
+
+                    Console.WriteLine($"Response {responseGet.Guid} is recieved for first request");
+
+                    if (uploadState.IsFirstChunk)
+                    {
+                        uploadState.IsFirstChunk = false;
+                        uploadParams.Add("guid", uploadState.LastResponse.Guid);
+                    }
+
+                    Console.WriteLine($"Response {responseGet.UploadId} is recieved for part number = {uploadState.PartNumber}");
 
                     if (uploadState.IsLastChunk)
                         return response;
@@ -325,7 +334,6 @@ namespace LightClient
                 {
                     httpResponse = httpClient.PostAsync(uploadState.ChunkRequestUri, multipartContent).Result;
 
-                    HttpStatusCode statusCode = httpResponse.StatusCode;
                     HttpContent responseContent = httpResponse.Content;
                     var json = await responseContent.ReadAsStringAsync();
 

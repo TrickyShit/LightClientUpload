@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace LightClient
 {
-    internal abstract class BaseResponse
+    public abstract class BaseResponse
     {
         public BaseResponse()
         {
@@ -27,8 +27,41 @@ namespace LightClient
         public string Password { get; set; }
     }
 
+    public class GroupSubResponse
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
 
-    internal class FileUploadResponse : BaseResponse
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("bucket_id")]
+        public string Bucket_Id { get; set; }
+    }
+
+
+    public class LoginResponse : BaseResponse
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+
+        [JsonProperty("token")]
+        public string Token { get; set; }
+
+        [JsonProperty("tenant_Id")]
+        public string TenantId { get; set; }
+
+        [JsonProperty("login")]
+        public string Login { get; set; }
+
+        [JsonProperty("staff")] // TODO Server Sync naming and meaning.
+        public bool IsAdmin { get; set; }
+
+        [JsonProperty("groups")]
+        public List<GroupSubResponse> Groups { get; set; }
+    }
+
+    public class FileUploadResponse : BaseResponse
     {
         private const string GuidAdsName = "cloud.lightupon.guid";
         private const string LastSeenVersion = "cloud.lightupon.lastseenversion";
