@@ -106,6 +106,7 @@ namespace LightClient
                 {
                     {"user_id", user_id},
                     {"version", version},
+                    {"prefix", filePrefix},
                 };
 
             return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams);
