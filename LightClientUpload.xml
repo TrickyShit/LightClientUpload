@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <doc>
     <assembly>
-        <name>LightClientUpload</name>
+        <name>LightClientLibrary</name>
     </assembly>
     <members>
         <member name="T:LightClient.LightClient">
@@ -9,7 +9,7 @@
             Main class
             </summary>
         </member>
-        <member name="F:LightClient.LightClient.FILE_UPLOAD_CHUNK_SIZE">
+        <member name="F:LightClient.LightClient.FileUploadChunkSize">
             <summary>
             If this size is exceeded, the file will be split into parts
             </summary>

@@ -10,52 +10,47 @@ namespace LightClient
 {
     public abstract class BaseResponse
     {
-        public BaseResponse()
-        {
-        }
-
-        public bool IsSuccess { get; set; } = true;
-        public string Message { get; set; }
+        public Boolean IsSuccess { get; set; } = true;
+        public String Message { get; set; }
     }
 
     internal class LoginRequest
     {
         [JsonProperty("login")]
-        public string Login { get; set; }
+        public String Login { get; set; }
 
         [JsonProperty("password")]
-        public string Password { get; set; }
+        public String Password { get; set; }
     }
 
     public class GroupSubResponse
     {
         [JsonProperty("id")]
-        public string Id { get; set; }
+        public String Id { get; set; }
 
         [JsonProperty("name")]
-        public string Name { get; set; }
+        public String Name { get; set; }
 
         [JsonProperty("bucket_id")]
-        public string Bucket_Id { get; set; }
+        public String BucketId { get; set; }
     }
-
 
     public class LoginResponse : BaseResponse
     {
         [JsonProperty("id")]
-        public string Id { get; set; }
+        public String Id { get; set; }
 
         [JsonProperty("token")]
-        public string Token { get; set; }
+        public String Token { get; set; }
 
         [JsonProperty("tenant_Id")]
-        public string TenantId { get; set; }
+        public String TenantId { get; set; }
 
         [JsonProperty("login")]
-        public string Login { get; set; }
+        public String Login { get; set; }
 
-        [JsonProperty("staff")] // TODO Server Sync naming and meaning.
-        public bool IsAdmin { get; set; }
+        [JsonProperty("staff")] 
+        public Boolean IsAdmin { get; set; }
 
         [JsonProperty("groups")]
         public List<GroupSubResponse> Groups { get; set; }
@@ -63,124 +58,117 @@ namespace LightClient
 
     public class FileUploadResponse : BaseResponse
     {
-        private const string GuidAdsName = "cloud.lightupon.guid";
-        private const string LastSeenVersion = "cloud.lightupon.lastseenversion";
-        private const string LocalPathAdsName = "cloud.lightupon.path";
-        private const string LockAdsName = "cloud.lightupon.lock";
-
-        public FileUploadResponse() : base()
-        {
-        }
+        private const String GuidAdsName = "cloud.lightupon.guid";
+        private const String LastSeenVersion = "cloud.lightupon.lastseenversion";
+        private const String LocalPathAdsName = "cloud.lightupon.path";
 
         [JsonProperty("guid")]
-        public string Guid { get; set; }
+        public String Guid { get; set; }
 
         [JsonProperty("orig_name")]
-        public string OriginalName { get; set; }
+        public String OriginalName { get; set; }
 
         [JsonProperty("version")]
-        public string Version { get; set; }
+        public String Version { get; set; }
 
         [JsonProperty("object_key")]
-        public string ObjectKey { get; set; }
+        public String ObjectKey { get; set; }
 
         [JsonProperty("upload_id")]
-        public string UploadId { get; set; }
+        public String UploadId { get; set; }
 
         [JsonProperty("end_byte")]
-        public string EndByte { get; set; }
+        public String EndByte { get; set; }
 
         [JsonProperty("md5")]
-        public string Md5 { get; set; }
+        public String Md5 { get; set; }
 
         [JsonProperty("upload_time")]
-        public long UploadTime { get; set; }
+        public Int64 UploadTime { get; set; }
 
         [JsonProperty("author_id")]
-        public string UserId { get; set; }
+        public String UserId { get; set; }
 
         [JsonProperty("author_name")]
-        public string UserName { get; set; }
+        public String UserName { get; set; }
 
         [JsonProperty("author_tel")]
-        public string UserTel { get; set; }
+        public String UserTel { get; set; }
 
         [JsonProperty("is_locked")]
-        public bool IsLocked { get; set; }
+        public Boolean IsLocked { get; set; }
 
         [JsonProperty("lock_modified_utc")]
-        public string LockModifiedUtc { get; set; }
+        public String LockModifiedUtc { get; set; }
 
         [JsonProperty("lock_user_id")]
-        public string LockUserId { get; set; }
+        public String LockUserId { get; set; }
 
         [JsonProperty("lock_user_name")]
-        public string LockUserName { get; set; }
+        public String LockUserName { get; set; }
 
         [JsonProperty("lock_user_tel")]
-        public string LockUserTel { get; set; }
+        public String LockUserTel { get; set; }
 
         [JsonProperty("is_deleted")]
-        public bool IsDeleted { get; set; }
+        public Boolean IsDeleted { get; set; }
 
         [JsonProperty("bytes")]
-        public long Bytes { get; set; }
+        public Int64 Bytes { get; set; }
 
         [JsonProperty("width")]
-        public string Width { get; set; }
+        public String Width { get; set; }
 
         [JsonProperty("height")]
-        public string Height { get; set; }
+        public String Height { get; set; }
 
-        public static IEnumerable<byte[]> IterateFileChunksWithoutFileBlocking(string filePath, Int32 offset)
+        public static IEnumerable<Byte[]> IterateFileChunksWithoutFileBlocking(String filePath, Int32 offset)
         {
             if (!File.Exists(filePath))
             {
                 throw new FileNotFoundException();
             }
+
+            var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+            if (fileStream.Length == 0)
+            {
+                throw new ArgumentException($"Size of the file {filePath} is 0 bytes");
+            }
+
+            Int32 chunkSize;
+            if (fileStream.Length < LightClient.FileUploadChunkSize)
+            {
+                chunkSize = (Int32)fileStream.Length;
+            }
             else
             {
-                FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-                if (fileStream.Length == 0)
-                {
-                    throw new ArgumentException($"Size of the file {filePath} is 0 bytes");
-                }
+                chunkSize = LightClient.FileUploadChunkSize;
+            }
 
-                Int32 chunkSize;
-                if (fileStream.Length < LightClient.FILE_UPLOAD_CHUNK_SIZE)
+            //add cycle do while(FileStream.Length - FileStream.Position <)
+            var buffer = new Byte[chunkSize];
+            for (var countReadBytes = 1; countReadBytes > 0; offset += countReadBytes)
+            {
+                if (fileStream.Length < offset + chunkSize)
                 {
-                    chunkSize = (Int32)fileStream.Length;
+                    chunkSize = (Int32)(fileStream.Length - offset);
+                    buffer = new Byte[chunkSize];
                 }
-                else
-                {
-                    chunkSize = LightClient.FILE_UPLOAD_CHUNK_SIZE;
-                }
-
-                //add cycle do while(FileStream.Length - FileStream.Position <)
-                var buffer = new Byte[chunkSize];
-                for (Int32 countReadBytes = 1; countReadBytes > 0; offset += countReadBytes)
-                {
-                    if (fileStream.Length < offset + chunkSize)
-                    {
-                        chunkSize = (Int32)(fileStream.Length - offset);
-                        buffer = new Byte[chunkSize];
-                    }
-                    fileStream.Seek(offset, SeekOrigin.Begin);
-                    countReadBytes = fileStream.Read(buffer, offset: 0, chunkSize);
-
-                    fileStream.Dispose();
-                    yield return buffer;
-
-                    fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-                }
+                fileStream.Seek(offset, SeekOrigin.Begin);
+                countReadBytes = fileStream.Read(buffer, 0, chunkSize);
 
                 fileStream.Dispose();
+                yield return buffer;
+
+                fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
             }
+
+            fileStream.Dispose();
         }
 
-        public string CalculateMd5Hash(byte[] filename)
+        public String CalculateMd5Hash(Byte[] filename)
         {
-            using (MD5 md5Hash = MD5.Create())
+            using (var md5Hash = MD5.Create())
             {
                 var sb = new StringBuilder();
                 foreach (var data in md5Hash.ComputeHash(filename))
@@ -191,31 +179,24 @@ namespace LightClient
             }
         }
 
-        public FileUploadResponse ResponseIfChangedWhileUploadFile(string fullPath, DateTime originalModifiedDateTime)
+        public FileUploadResponse ResponseIfChangedWhileUploadFile(String fullPath, DateTime originalModifiedDateTime)
         {
             var currentModifiedDateTime = /*DateTimeExtensions.LastWriteTimeUtcWithCorrectOffset*/File.GetLastWriteTimeUtc(fullPath);
 
-            if (originalModifiedDateTime != currentModifiedDateTime)
-            {
-                string message = $"Upload is stopped. File {fullPath} was changed just during uploading process.";
-                Console.WriteLine(message);
+            if (originalModifiedDateTime == currentModifiedDateTime)
+                return new FileUploadResponse {IsSuccess = true};
 
-                return new FileUploadResponse
-                {
-                    IsSuccess = false,
-                    Message = $"Upload is stopped. File {fullPath} was changed just during uploading process."
-                };
-            }
-            else
+            var message = $"Upload is stopped. File {fullPath} was changed just during uploading process.";
+            Console.WriteLine(message);
+
+            return new FileUploadResponse
             {
-                return new FileUploadResponse
-                {
-                    IsSuccess = true
-                };
-            }
+                IsSuccess = false,
+                Message = message
+            };
         }
 
-        public static void TryWriteGuidAndLocalPathMarkersIfNotTheSame(FileInfo fi, string guid)
+        public static void TryWriteGuidAndLocalPathMarkersIfNotTheSame(FileInfo fi, String guid)
         {
             if (fi == null)
             {
@@ -226,22 +207,21 @@ namespace LightClient
 
             var bytes = Encoding.UTF8.GetBytes(path);
             var hexStringWithDashes = BitConverter.ToString(bytes);
-            var hex_path = hexStringWithDashes.Replace("-", "");
+            var hexPath = hexStringWithDashes.Replace("-", "");
 
             var guidAdsPath = $"{path}:{GuidAdsName}";
             var localPathAdsPath = $"{path}:{LocalPathAdsName}";
 
-            string current = "";
+            var current = "";
             if (NtfsAlternateStream.Exists($"{path}:{GuidAdsName}"))
                  current = NtfsAlternateStream.ReadAllText($"{path}:{GuidAdsName}");
 
-            DateTime currentLastWriteUtc;
             FileStream stream;
 
             if (current == guid)
             {
                 // Update only local path marker if it is needed.
-                string currentLocalPathMarker = "";
+                var currentLocalPathMarker = "";
                 if (NtfsAlternateStream.Exists($"{path}:{LocalPathAdsName}"))
                      currentLocalPathMarker = NtfsAlternateStream.ReadAllText($"{path}:{LocalPathAdsName}");
 
@@ -254,8 +234,7 @@ namespace LightClient
 
                     stream.Close();
 
-
-                    NtfsAlternateStream.WriteAllText(localPathAdsPath, hex_path);
+                    NtfsAlternateStream.WriteAllText(localPathAdsPath, hexPath);
 
                     //File.SetLastWriteTimeUtc(path, currentLastWriteUtc);//try to remove it
                 }
@@ -263,7 +242,7 @@ namespace LightClient
                 return;
             }
 
-            try // TODO RR find proper solution here.
+            try 
             {
                 if (fi.IsReadOnly)
                 {
@@ -275,8 +254,6 @@ namespace LightClient
                 return;
             }
 
-            currentLastWriteUtc = File.GetLastWriteTimeUtc(path);
-
             stream = NtfsAlternateStream.Open(guidAdsPath, FileAccess.Write, FileMode.OpenOrCreate, FileShare.None);
             stream.Close();
             NtfsAlternateStream.WriteAllText(guidAdsPath, guid);
@@ -287,12 +264,12 @@ namespace LightClient
 
             stream.Close();
 
-            NtfsAlternateStream.WriteAllText(localPathAdsPath, hex_path);
+            NtfsAlternateStream.WriteAllText(localPathAdsPath, hexPath);
 
             //File.SetLastWriteTimeUtc(path, currentLastWriteUtc);//maybe this row should be deleted
         }
 
-        public static void TryWriteLastSeenVersion(FileInfo fi, string version)
+        public static void TryWriteLastSeenVersion(FileInfo fi, String version)
         {
             if (fi == null)
             {
@@ -316,35 +293,32 @@ namespace LightClient
 
     internal class ChunkUploadState // TODO Release 2.0 Range for download Range: 65545-
     {
-        internal FileUploadResponse lastResponse;
+        private FileUploadResponse _lastResponse;
 
-        internal string ChunkRequestUri { get; set; }
+        internal String ChunkRequestUri { get; set; }
 
-        internal string Guid { get; set; }
+        internal String Guid { get; set; }
 
-        internal bool IsFirstChunk { get; set; }
+        internal Boolean IsFirstChunk { get; set; }
 
-        internal bool IsLastChunk { get; set; }
+        internal Boolean IsLastChunk { get; set; }
 
         internal FileUploadResponse LastResponse
         {
-            get { return lastResponse; }
+            get => _lastResponse;
             set
             {
-                lastResponse = value;
+                _lastResponse = value;
 
-                if (lastResponse != null)
+                if (_lastResponse != null)
                 {
-                    Guid = lastResponse.Guid;
+                    Guid = _lastResponse.Guid;
                 }
             }
         }
 
-        internal long PartNumber { get; private set; }
+        internal Int64 PartNumber { get; private set; }
 
-        internal void IncreasePartNumber()
-        {
-            PartNumber++;
-        }
+        internal void IncreasePartNumber() => PartNumber++;
     }
 }

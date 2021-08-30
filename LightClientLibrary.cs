@@ -20,12 +20,12 @@ namespace LightClient
         /// <summary>
         /// If this size is exceeded, the file will be split into parts
         /// </summary>
-        public const int FILE_UPLOAD_CHUNK_SIZE = 2000000;
-        private string version;
+        public const Int32 FileUploadChunkSize = 2000000;
+        private String _version;
         /// <summary>
         /// Server Url
         /// </summary>
-        public string Host;
+        public String Host;
 
         /// <summary>
         /// Provides authorization to server with login, password and Url of server
@@ -34,7 +34,7 @@ namespace LightClient
         /// <param name="password">Password for authorization to server</param>
         /// <param name="host">Server Url</param>
         /// <returns>HttpResponseMessage from server</returns>
-        public async Task<HttpResponseMessage> LoginAsync(string login, string password, string host)
+        public async Task<HttpResponseMessage> LoginAsync(String login, String password, String host)
         {
             try
             {
@@ -68,61 +68,60 @@ namespace LightClient
             }
         }
 
-
         /// <summary>
         /// Uploads file to server.
         /// </summary>
         /// <param name = "host" > Server Url.</param>
         /// <param name = "token" > Authorization token from server.</param> 
-        /// <param name = "user_id" > User identificator from server.</param>
-        /// <param name = "bucket_id"> Bucket from server.</param>
+        /// <param name = "userId" > User identificator from server.</param>
+        /// <param name = "bucketId"> Bucket from server.</param>
         /// <param name = "fullPath"> Full path to the file</param>
         /// <param name = "filePrefix"> Prefix from server, need if file located in the subdirectory, can be empty</param>
         /// <param name = "lastseenversion"> Vector clock version from server (optional parameter)</param>
         /// <returns>HttpResponseMessage from server</returns>
-        public async Task<HttpResponseMessage> Upload(string host, string token, string user_id, string bucket_id, string fullPath, string filePrefix, string lastseenversion = "")
+        public async Task<HttpResponseMessage> Upload(String host, String token, String userId, String bucketId, String fullPath, String filePrefix, String lastseenversion = "")
         {
             Host = host;
-            string requestUri;
+            String requestUri;
             if (filePrefix.EndsWith("/")) filePrefix = filePrefix.Remove(filePrefix.Length - 1);
             if (filePrefix == "")
-                requestUri = Combine(host, "riak", "upload", bucket_id);
+                requestUri = Combine(host, "riak", "upload", bucketId);
             else
-                requestUri = Combine(host, "riak", "upload", bucket_id, "?prefix=" + filePrefix);
+                requestUri = Combine(host, "riak", "upload", bucketId, "?prefix=" + filePrefix);
             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
-            var timeStamp = ((int)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
-            version = IncrementVersion(user_id, timeStamp, lastseenversion);
+            var timeStamp = ((Int32)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
+            _version = IncrementVersion(userId, timeStamp, lastseenversion);
             var fileInfo = new FileInfo(fullPath);
 
             var chunkUploadState = new ChunkUploadState
             {
                 ChunkRequestUri = requestUri,
                 Guid = "",
-                IsLastChunk = fileInfo.Length < FILE_UPLOAD_CHUNK_SIZE,
+                IsLastChunk = fileInfo.Length < FileUploadChunkSize,
                 IsFirstChunk = true
             };
 
-            var uploadParams = new Dictionary<string, string>
+            var uploadParams = new Dictionary<String, String>
                 {
-                    {"user_id", user_id},
-                    {"version", version},
+                    {"user_id", userId},
+                    {"version", _version},
                     {"prefix", filePrefix},
                 };
 
             return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams);
         }
 
-        internal long AddContentRange(MultipartFormDataContent content, ChunkUploadState uploadState, FileInfo fileInfo)
+        internal Int64 AddContentRange(MultipartFormDataContent content, ChunkUploadState uploadState, FileInfo fileInfo)
         {
-            var endByte = ((uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE - 1) > fileInfo.Length
+            var endByte = ((uploadState.PartNumber + 1) * FileUploadChunkSize - 1) > fileInfo.Length
                             ? fileInfo.Length - 1
-                            : (uploadState.PartNumber + 1) * FILE_UPLOAD_CHUNK_SIZE - 1;
-            content.Headers.Add("content-range", $"bytes {uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE}-{endByte}{@"/"}{fileInfo.Length}");
+                            : (uploadState.PartNumber + 1) * FileUploadChunkSize - 1;
+            content.Headers.Add("content-range", $"bytes {uploadState.PartNumber * FileUploadChunkSize}-{endByte}{@"/"}{fileInfo.Length}");
 
             return endByte;
         }
 
-        internal void AddETags(MultipartFormDataContent content, List<string> md5S)
+        internal void AddETags(MultipartFormDataContent content, List<String> md5S)
         {
             var etags = "";
 
@@ -141,10 +140,10 @@ namespace LightClient
             content.Add(new StringContent(etags), "etags[]");
         }
 
-        private string Combine(params string[] uri)
+        private String Combine(params String[] uri)
         {
             uri[0] = uri[0].TrimEnd('/');
-            string result = "";
+            var result = "";
             result += uri[0] + "/";
             for (var i = 1; i < uri.Length; i++)
             {
@@ -156,24 +155,27 @@ namespace LightClient
             return result;
         }
 
-        private string IncrementVersion(string userId, string timestamp, string oldversion = "")
+        private String IncrementVersion(String userId, String timestamp, String oldversion = "")
         {
             var dvvset = new Dvvdotnet();
             Clock dot;
-            if (oldversion == "" || oldversion == null) dot = dvvset.Update(new Clock(timestamp), userId);
+            if (oldversion == "" || oldversion == null)
+            {
+                dot = dvvset.Update(new Clock(timestamp), userId);
+            }
             else
             {
                 var incomeClock = Clock.StringToClock(oldversion);
                 dot = dvvset.Update(incomeClock, userId);
             }
             var d = Clock.ClockToString(dot);
-            var version = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(d));
+            var version = Convert.ToBase64String(Encoding.UTF8.GetBytes(d));
 
             return version;
         }
 
-        private MultipartFormDataContent MultipartFormData(List<string> calculatedMd5S, string md5OfChunk,
-            ChunkUploadState uploadState, Dictionary<string, string> uploadParams, FileInfo fileInfo, Byte[] bytes = null)
+        private MultipartFormDataContent MultipartFormData(List<String> calculatedMd5S, String md5OfChunk,
+            ChunkUploadState uploadState, Dictionary<String, String> uploadParams, FileInfo fileInfo, Byte[] bytes = null)
         {
             var fileUploadResponse = new FileUploadResponse();
             var boundary = "-----" + DateTime.Now.Ticks.ToString("x");
@@ -189,7 +191,7 @@ namespace LightClient
 
             ByteArrayContent bytemd5;
 
-            if (bytes == null) bytes = new byte[0];
+            if (bytes == null) bytes = new Byte[0];
             multiPartContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
             {
                 Name = "files[]",
@@ -217,13 +219,13 @@ namespace LightClient
             return multiPartContent;
         }
 
-        private async Task<HttpResponseMessage> ResponseOfIterativelyUploadFile(FileInfo fileInfo, string token, ChunkUploadState uploadState,
-                                                                                       Dictionary<string, string> uploadParams)
+        private async Task<HttpResponseMessage> ResponseOfIterativelyUploadFile(FileInfo fileInfo, String token, ChunkUploadState uploadState,
+                                                                                       Dictionary<String, String> uploadParams)
         {
             var fileUploadResponse = new FileUploadResponse();
-            string fullPath = fileInfo.FullName;
-            var calculatedMd5S = new List<string>();
-            string baseRequestUrl = uploadState.ChunkRequestUri;
+            var fullPath = fileInfo.FullName;
+            var calculatedMd5S = new List<String>();
+            var baseRequestUrl = uploadState.ChunkRequestUri;
             MultipartFormDataContent multipartFormData;
             HttpResponseMessage response;
 
@@ -234,10 +236,10 @@ namespace LightClient
                     var currentLocalMd5 = fileUploadResponse.CalculateMd5Hash(currentPlainBytes);
                     calculatedMd5S.Add(currentLocalMd5);
 
-                    if (currentPlainBytes.Length < FILE_UPLOAD_CHUNK_SIZE)
+                    if (currentPlainBytes.Length < FileUploadChunkSize)
                         uploadState.IsLastChunk = true;
 
-                    var percents = uploadState.PartNumber * FILE_UPLOAD_CHUNK_SIZE / (double)fileInfo.Length;
+                    var percents = uploadState.PartNumber * FileUploadChunkSize / (Double)fileInfo.Length;
                     Console.WriteLine($"Upload part[{uploadState.PartNumber}] for file {fileInfo.Name}. Uploaded {percents:P2}");
 
                     if (uploadParams.ContainsKey("guid"))
@@ -261,12 +263,10 @@ namespace LightClient
                         {
                             if (uploadState.IsLastChunk)
                                 return response;
-                            else
-                                uploadState.IncreasePartNumber();
+                            uploadState.IncreasePartNumber();
 
                             continue;
                         }
-
 
                         FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo, uploadState.LastResponse.Guid);
 
@@ -319,10 +319,10 @@ namespace LightClient
         }
 
         private async Task<HttpResponseMessage> ServerUploadResponse(MultipartFormDataContent multipartContent,
-                                                                     string token, ChunkUploadState uploadState,
-                                                                     string currentLocalMd5, FileInfo fileInfo)
+                                                                     String token, ChunkUploadState uploadState,
+                                                                     String currentLocalMd5, FileInfo fileInfo)
         {
-            HttpResponseMessage httpResponse = new HttpResponseMessage();
+            var httpResponse = new HttpResponseMessage();
 
             using (var httpClient = new HttpClient())
             {
@@ -335,7 +335,7 @@ namespace LightClient
                 {
                     httpResponse = httpClient.PostAsync(uploadState.ChunkRequestUri, multipartContent).Result;
 
-                    HttpContent responseContent = httpResponse.Content;
+                    var responseContent = httpResponse.Content;
                     var json = await responseContent.ReadAsStringAsync();
 
                     //add method HandleGoodUploadRequest
@@ -361,7 +361,7 @@ namespace LightClient
 
                         if (uploadState.IsLastChunk)
                         {
-                            FileUploadResponse.TryWriteLastSeenVersion(fileInfo, version);
+                            FileUploadResponse.TryWriteLastSeenVersion(fileInfo, _version);
 
                             var message = $"File {fileInfo.FullName} was uploaded";
                             Console.WriteLine(message);
