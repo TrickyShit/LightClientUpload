@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using LightClient;
+using LightClientLibrary;
 using Newtonsoft.Json;
 using NUnit.Framework;
 
@@ -9,19 +9,14 @@ namespace LightClientTests
     [TestFixture]
     public class Tests
     {
-        private const String DiffUploadFile = @"E:\Downloads\integration1\diffuploadtest.txt";
-        private readonly LightClient.LightClient _lightClient = new LightClient.LightClient();
-
-        [SetUp]
-        public void Setup()
-        {
-        }
+        private const String DiffUploadFile = @"E:\LightIntegrationTests\integration1\diffuploadtest.txt";
+        private readonly LightClient _lightClient = new LightClient();
 
         [Test]
         [Order(1)]
         public void DiffUploadTest()
         {
-            var host = "https://lightupon.cloud";
+            var host = "http://lightup.cloud";
             var response = _lightClient.LoginAsync("integration1", "integration1", host).Result;
 
             Assert.IsTrue(response.IsSuccessStatusCode);
@@ -43,8 +38,8 @@ namespace LightClientTests
             File.WriteAllBytes(DiffUploadFile, bytes);
 
             var startUpload = DateTime.Now.Ticks / 1000000;  //set time precision to 0.1 seconds
-            var uploadResponse = _lightClient.Upload(host, responseValues?.Token, responseValues.Id,
-                responseValues.Groups[0].BucketId, DiffUploadFile, "").Result;
+            var uploadResponse = _lightClient.Upload(host, responseValues?.Token, responseValues?.Id,
+                responseValues?.Groups[0].BucketId, DiffUploadFile, "").Result;
 
             var durationUpload = DateTime.Now.Ticks / 1000000 - startUpload;
 

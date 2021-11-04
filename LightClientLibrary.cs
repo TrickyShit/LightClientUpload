@@ -10,7 +10,10 @@ using System.Threading.Tasks;
 using LUC.DVVSet;
 using Newtonsoft.Json;
 
-namespace LightClient
+using Serilog;
+using Serilog.Events;
+
+namespace LightClientLibrary
 {
     /// <summary>
     /// Main class
@@ -22,10 +25,11 @@ namespace LightClient
         /// </summary>
         public const Int32 FileUploadChunkSize = 2000000;
         private String _version;
+
         /// <summary>
         /// Server Url
         /// </summary>
-        public String Host;
+        public String Host { get; set; }
 
         /// <summary>
         /// Provides authorization to server with login, password and Url of server
@@ -84,11 +88,13 @@ namespace LightClient
             Host = host;
             String requestUri;
             if (filePrefix.EndsWith("/"))
+            {
                 filePrefix = filePrefix.Remove(filePrefix.Length - 1);
-            if (filePrefix == "")
-                requestUri = Combine(host, "riak", "upload", bucketId);
-            else
-                requestUri = Combine(host, "riak", "upload", bucketId, "?prefix=" + filePrefix);
+            }
+
+            requestUri = filePrefix == ""
+                ? Combine(host, "riak", "upload", bucketId)
+                : Combine(host, "riak", "upload", bucketId, "?prefix=" + filePrefix);
             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
             var timeStamp = ((Int32) (lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
             _version = IncrementVersion(userId, timeStamp, lastseenversion);
@@ -124,37 +130,38 @@ namespace LightClient
 
         internal void AddETags(MultipartFormDataContent content, List<String> md5S)
         {
-            var etags = "";
+            var etags = new StringBuilder();
 
             if (md5S != null)
             {
                 var part = 1;
                 foreach (var md5 in md5S)
                 {
-                    etags += $"{part},{md5},";
+                    etags.Append($"{part},{md5},");
                     part++;
                 }
 
                 etags = etags.Remove(etags.Length - 1, 1);
             }
-
-            content.Add(new StringContent(etags), "etags[]");
+            content.Add(new StringContent(etags.ToString()), "etags[]");
         }
 
         private String Combine(params String[] uri)
         {
             uri[0] = uri[0].TrimEnd('/');
-            var result = "";
-            result += uri[0] + "/";
+            var result = new StringBuilder();
+            result.Append(uri[0] + "/");
             for (var i = 1; i < uri.Length; i++)
             {
-                if (uri[i] == "")
+                if (uri[i] == null|| uri[i] == "")
+                {
                     continue;
-                uri[i] = uri[i].TrimStart('/');
-                uri[i] = uri[i].TrimEnd('/');
-                result += uri[i] + "/";
+                }
+
+                uri[i] = uri[i].TrimStart('/').TrimEnd('/');
+                result.Append(uri[i] + "/");
             }
-            return result;
+            return result.ToString();
         }
 
         private static String IncrementVersion(String userId, String timestamp, String oldversion = "")
@@ -191,7 +198,9 @@ namespace LightClient
             }
 
             if (bytes == null)
+            {
                 bytes = new Byte[0];
+            }
 
             multiPartContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
             {
@@ -207,15 +216,17 @@ namespace LightClient
             AddContentRange(multiPartContent, uploadState, fileInfo);
 
             if (!uploadState.IsLastChunk || bytes.Length == 0)
+            {
                 return multiPartContent;
+            }
 
             AddETags(multiPartContent, calculatedMd5S);
 
             var i = 0;
-            Console.WriteLine("Last lap!");
+            Log.Information("Last lap!");
             foreach (var calculatedItemMd5 in calculatedMd5S)
             {
-                Console.WriteLine($"Chunk: {i} - md5 {calculatedItemMd5}");
+                Log.Information($"Chunk: {i} - md5 {calculatedItemMd5}");
                 i++;
             }
             return multiPartContent;
@@ -237,10 +248,12 @@ namespace LightClient
                     calculatedMd5S.Add(currentLocalMd5);
 
                     if (currentPlainBytes.Length < FileUploadChunkSize)
+                    {
                         uploadState.IsLastChunk = true;
+                    }
 
                     var percents = uploadState.PartNumber * FileUploadChunkSize / (Double) fileInfo.Length;
-                    Console.WriteLine($"Upload part[{uploadState.PartNumber}] for file {fileInfo.Name}. Uploaded {percents:P2}");
+                    Log.Information($"Upload part[{uploadState.PartNumber}] for file {fileInfo.Name}. Uploaded {percents:P2}");
 
                     MultipartFormDataContent multipartFormData;
                     HttpResponseMessage response;
@@ -248,7 +261,9 @@ namespace LightClient
                     if (uploadParams.ContainsKey("guid"))
                     {
                         if (uploadState.LastResponse?.UploadId != null)
+                        {
                             uploadState.ChunkRequestUri = $"{baseRequestUrl}{uploadState.LastResponse.UploadId}/{uploadState.PartNumber + 1}/";
+                        }
 
                         multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
                                                                  uploadParams, fileInfo);
@@ -260,12 +275,17 @@ namespace LightClient
                         var responseGetGuid = JsonConvert.DeserializeObject<FileUploadResponse>(str);
 
                         if (responseGetGuid != null && !responseGetGuid.IsSuccess)
+                        {
                             return response;
+                        }
 
                         if (response.StatusCode is (HttpStatusCode) 206)
                         {
                             if (uploadState.IsLastChunk)
+                            {
                                 return response;
+                            }
+
                             uploadState.IncreasePartNumber();
 
                             continue;
@@ -276,18 +296,16 @@ namespace LightClient
                             FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo,
                                 uploadState.LastResponse.Guid);
                         }
-
-                        //if (fileInfo.Length <= FILE_UPLOAD_CHUNK_SIZE)   //If file < 2000000 bytes then first request = upload to server
-                        //    return response;
-
                     }
 
                     if (uploadState.LastResponse?.UploadId != null)
+                    {
                         uploadState.ChunkRequestUri = $"{baseRequestUrl}{uploadState.LastResponse.UploadId}/{uploadState.PartNumber + 1}/";
+                    }
 
                     multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
                                                             uploadParams, fileInfo, currentPlainBytes);
-                    //multipartFormData.Add(new StringContent(uploadState.PartNumber.ToString()), "part_number");
+                    multipartFormData.Add(new StringContent(uploadState.PartNumber.ToString()), "part_number");
 
                     response = await ServerUploadResponse(multipartFormData, token, uploadState,
                        currentLocalMd5, fileInfo);
@@ -296,7 +314,7 @@ namespace LightClient
 
                     if (responseGet != null)
                     {
-                        Console.WriteLine($"Response {responseGet.Guid} is recieved for first request");
+                        Log.Information($"Response {responseGet.Guid} is recieved for first request");
 
                         if (uploadState.IsFirstChunk)
                         {
@@ -307,18 +325,22 @@ namespace LightClient
                             }
                         }
 
-                        Console.WriteLine(
+                        Log.Information(
                             $"Response {responseGet.UploadId} is recieved for part number = {uploadState.PartNumber}");
                     }
 
                     if (uploadState.IsLastChunk)
+                    {
                         return response;
+                    }
 
                     uploadState.IncreasePartNumber();
 
                     var responseIfChanged = fileUploadResponse.ResponseIfChangedWhileUploadFile(fullPath, File.GetLastWriteTimeUtc(fullPath));
                     if (!responseIfChanged.IsSuccess)
+                    {
                         return response;
+                    }
                 }
             }
             catch (FileNotFoundException)
@@ -361,16 +383,13 @@ namespace LightClient
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine(ex.ToString(), ex.Message);
+                            Log.Error(ex.ToString(), ex.Message);
                             return httpResponse;
                         }
 
-                        if (uploadState.LastResponse != null && currentLocalMd5 != uploadState.LastResponse.Md5) // TODO Release 2.0 Server Temp do not use the logic.
+                        if (uploadState.LastResponse != null && currentLocalMd5 != uploadState.LastResponse.Md5)
                         {
-                            var message = "Calculated Md5 and Md5 from server are different";
-                            Console.WriteLine(message);
-
-                            return httpResponse;
+                            throw new ArgumentException("Calculated Md5 and Md5 from server are different");
                         }
 
                         if (uploadState.IsLastChunk)
@@ -378,20 +397,20 @@ namespace LightClient
                             FileUploadResponse.TryWriteLastSeenVersion(fileInfo, _version);
 
                             var message = $"File {fileInfo.FullName} was uploaded";
-                            Console.WriteLine(message);
-                            Console.WriteLine();
+                            Log.Information(message);
 
                             return httpResponse;
                         }
                     }
                     else
                     {
+                        Log.Error(json);
                         return httpResponse;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex.Message);
+                    Log.Error(ex.Message);
 
                     return httpResponse;
                 }

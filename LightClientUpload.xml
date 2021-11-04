@@ -14,7 +14,7 @@
             If this size is exceeded, the file will be split into parts
             </summary>
         </member>
-        <member name="F:LightClient.LightClient.Host">
+        <member name="P:LightClient.LightClient.Host">
             <summary>
             Server Url
             </summary>
@@ -34,8 +34,8 @@
             </summary>
             <param name = "host" > Server Url.</param>
             <param name = "token" > Authorization token from server.</param> 
-            <param name = "user_id" > User identificator from server.</param>
-            <param name = "bucket_id"> Bucket from server.</param>
+            <param name = "userId" > User identificator from server.</param>
+            <param name = "bucketId"> Bucket from server.</param>
             <param name = "fullPath"> Full path to the file</param>
             <param name = "filePrefix"> Prefix from server, need if file located in the subdirectory, can be empty</param>
             <param name = "lastseenversion"> Vector clock version from server (optional parameter)</param>

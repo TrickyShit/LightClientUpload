@@ -65,7 +65,7 @@
     <PackageReference Include="CodeFluentRuntimeClient">
       <Version>1.0.0.844</Version>
     </PackageReference>
-    <PackageReference Include="LUC.DVVSet" Version="1.0.0.2" />
+    <PackageReference Include="LUC.DVVSet" Version="1.0.0.3" />
     <PackageReference Include="Newtonsoft.Json">
       <Version>13.0.1</Version>
     </PackageReference>
@@ -73,6 +73,9 @@
       <Version>5.10.0</Version>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Serilog">
+      <Version>2.10.0</Version>
     </PackageReference>
   </ItemGroup>
   <ItemGroup>

@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("RIAK-Upload")]
 [assembly: AssemblyDescription("This library allows quick and simple interaction with the RIAK servers")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("lightupon.cloud")]
+[assembly: AssemblyCompany("lightup.cloud")]
 [assembly: AssemblyProduct("RIAK-Library")]
 [assembly: AssemblyCopyright("Copyright ©  2021")]
 [assembly: AssemblyTrademark("")]

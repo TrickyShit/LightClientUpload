@@ -6,7 +6,9 @@ using System.Text;
 using CodeFluent.Runtime.BinaryServices;
 using Newtonsoft.Json;
 
-namespace LightClient
+using Serilog;
+
+namespace LightClientLibrary
 {
     public abstract class BaseResponse
     {
@@ -130,22 +132,15 @@ namespace LightClient
             }
 
             var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-            if (fileStream.Length == 0)
-            {
-                throw new ArgumentException($"Size of the file {filePath} is 0 bytes");
-            }
+            return fileStream.Length == 0
+                ? throw new ArgumentException($"Size of the file {filePath} is 0 bytes")
+                : FileChunksIteratorWithoutFileBlocking( filePath,  offset, fileStream);
+        }
 
-            Int32 chunkSize;
-            if (fileStream.Length < LightClient.FileUploadChunkSize)
-            {
-                chunkSize = (Int32)fileStream.Length;
-            }
-            else
-            {
-                chunkSize = LightClient.FileUploadChunkSize;
-            }
+        private static IEnumerable<Byte[]> FileChunksIteratorWithoutFileBlocking(String filePath, Int32 offset, FileStream fileStream)
+        { 
+            Int32 chunkSize = fileStream.Length < LightClient.FileUploadChunkSize ? (Int32)fileStream.Length : LightClient.FileUploadChunkSize;
 
-            //add cycle do while(FileStream.Length - FileStream.Position <)
             var buffer = new Byte[chunkSize];
             for (var countReadBytes = 1; countReadBytes > 0; offset += countReadBytes)
             {
@@ -184,10 +179,12 @@ namespace LightClient
             var currentModifiedDateTime = /*DateTimeExtensions.LastWriteTimeUtcWithCorrectOffset*/File.GetLastWriteTimeUtc(fullPath);
 
             if (originalModifiedDateTime == currentModifiedDateTime)
+            {
                 return new FileUploadResponse {IsSuccess = true};
+            }
 
             var message = $"Upload is stopped. File {fullPath} was changed just during uploading process.";
-            Console.WriteLine(message);
+            Log.Warning(message);
 
             return new FileUploadResponse
             {
@@ -214,7 +211,9 @@ namespace LightClient
 
             var current = "";
             if (NtfsAlternateStream.Exists($"{path}:{GuidAdsName}"))
-                 current = NtfsAlternateStream.ReadAllText($"{path}:{GuidAdsName}");
+            {
+                current = NtfsAlternateStream.ReadAllText($"{path}:{GuidAdsName}");
+            }
 
             FileStream stream;
 
@@ -223,7 +222,9 @@ namespace LightClient
                 // Update only local path marker if it is needed.
                 var currentLocalPathMarker = "";
                 if (NtfsAlternateStream.Exists($"{path}:{LocalPathAdsName}"))
-                     currentLocalPathMarker = NtfsAlternateStream.ReadAllText($"{path}:{LocalPathAdsName}");
+                {
+                    currentLocalPathMarker = NtfsAlternateStream.ReadAllText($"{path}:{LocalPathAdsName}");
+                }
 
                 if (currentLocalPathMarker != path)
                 {
@@ -285,13 +286,16 @@ namespace LightClient
 
                 NtfsAlternateStream.WriteAllText($"{fi.FullName}:{LastSeenVersion}", version);
 
-                Console.WriteLine($"{fi.FullName} has last seen version {version}");
+                Log.Information($"{fi.FullName} has last seen version {version}");
             }
-            catch (DirectoryNotFoundException) { }
+            catch (DirectoryNotFoundException) 
+            {
+                Log.Error(fi.FullName + "is not found!");
+            }
         }
     }
 
-    internal class ChunkUploadState // TODO Release 2.0 Range for download Range: 65545-
+    internal class ChunkUploadState
     {
         private FileUploadResponse _lastResponse;
 
