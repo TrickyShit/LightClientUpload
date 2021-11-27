@@ -4,22 +4,22 @@
         <name>LightClientLibrary</name>
     </assembly>
     <members>
-        <member name="T:LightClient.LightClient">
+        <member name="T:LightClientLibrary.LightClient">
             <summary>
             Main class
             </summary>
         </member>
-        <member name="F:LightClient.LightClient.FileUploadChunkSize">
+        <member name="F:LightClientLibrary.LightClient.FileUploadChunkSize">
             <summary>
             If this size is exceeded, the file will be split into parts
             </summary>
         </member>
-        <member name="P:LightClient.LightClient.Host">
+        <member name="P:LightClientLibrary.LightClient.Host">
             <summary>
             Server Url
             </summary>
         </member>
-        <member name="M:LightClient.LightClient.LoginAsync(System.String,System.String,System.String)">
+        <member name="M:LightClientLibrary.LightClient.LoginAsync(System.String,System.String,System.String)">
             <summary>
             Provides authorization to server with login, password and Url of server
             </summary>
@@ -28,7 +28,7 @@
             <param name="host">Server Url</param>
             <returns>HttpResponseMessage from server</returns>
         </member>
-        <member name="M:LightClient.LightClient.Upload(System.String,System.String,System.String,System.String,System.String,System.String,System.String)">
+        <member name="M:LightClientLibrary.LightClient.Upload(System.String,System.String,System.String,System.String,System.String,System.String,System.String)">
             <summary>
             Uploads file to server.
             </summary>

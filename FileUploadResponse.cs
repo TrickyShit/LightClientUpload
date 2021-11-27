@@ -1,12 +1,14 @@
-﻿using System;
+﻿using CodeFluent.Runtime.BinaryServices;
+
+using Newtonsoft.Json;
+
+using Serilog;
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using CodeFluent.Runtime.BinaryServices;
-using Newtonsoft.Json;
-
-using Serilog;
 
 namespace LightClientLibrary
 {
@@ -51,7 +53,7 @@ namespace LightClientLibrary
         [JsonProperty("login")]
         public String Login { get; set; }
 
-        [JsonProperty("staff")] 
+        [JsonProperty("staff")]
         public Boolean IsAdmin { get; set; }
 
         [JsonProperty("groups")]
@@ -134,11 +136,11 @@ namespace LightClientLibrary
             var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
             return fileStream.Length == 0
                 ? throw new ArgumentException($"Size of the file {filePath} is 0 bytes")
-                : FileChunksIteratorWithoutFileBlocking( filePath,  offset, fileStream);
+                : FileChunksIteratorWithoutFileBlocking(filePath, offset, fileStream);
         }
 
         private static IEnumerable<Byte[]> FileChunksIteratorWithoutFileBlocking(String filePath, Int32 offset, FileStream fileStream)
-        { 
+        {
             Int32 chunkSize = fileStream.Length < LightClient.FileUploadChunkSize ? (Int32)fileStream.Length : LightClient.FileUploadChunkSize;
 
             var buffer = new Byte[chunkSize];
@@ -180,7 +182,7 @@ namespace LightClientLibrary
 
             if (originalModifiedDateTime == currentModifiedDateTime)
             {
-                return new FileUploadResponse {IsSuccess = true};
+                return new FileUploadResponse { IsSuccess = true };
             }
 
             var message = $"Upload is stopped. File {fullPath} was changed just during uploading process.";
@@ -243,7 +245,7 @@ namespace LightClientLibrary
                 return;
             }
 
-            try 
+            try
             {
                 if (fi.IsReadOnly)
                 {
@@ -288,7 +290,7 @@ namespace LightClientLibrary
 
                 Log.Information($"{fi.FullName} has last seen version {version}");
             }
-            catch (DirectoryNotFoundException) 
+            catch (DirectoryNotFoundException)
             {
                 Log.Error(fi.FullName + "is not found!");
             }

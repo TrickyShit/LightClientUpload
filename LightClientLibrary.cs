@@ -11,7 +11,6 @@ using LUC.DVVSet;
 using Newtonsoft.Json;
 
 using Serilog;
-using Serilog.Events;
 
 namespace LightClientLibrary
 {
@@ -24,7 +23,6 @@ namespace LightClientLibrary
         /// If this size is exceeded, the file will be split into parts
         /// </summary>
         public const Int32 FileUploadChunkSize = 2000000;
-        private String _version;
 
         /// <summary>
         /// Server Url
@@ -83,7 +81,7 @@ namespace LightClientLibrary
         /// <param name = "filePrefix"> Prefix from server, need if file located in the subdirectory, can be empty</param>
         /// <param name = "lastseenversion"> Vector clock version from server (optional parameter)</param>
         /// <returns>HttpResponseMessage from server</returns>
-        public async Task<HttpResponseMessage> Upload(String host, String token, String userId, String bucketId, String fullPath, String filePrefix, String lastseenversion = "")
+        public async Task<HttpResponseMessage> Upload(String host, String token, String userId, String bucketId, String fullPath, String filePrefix, String lastseenversion)
         {
             Host = host;
             String requestUri;
@@ -95,9 +93,6 @@ namespace LightClientLibrary
             requestUri = filePrefix == ""
                 ? Combine(host, "riak", "upload", bucketId)
                 : Combine(host, "riak", "upload", bucketId, "?prefix=" + filePrefix);
-            var lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
-            var timeStamp = ((Int32) (lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
-            _version = IncrementVersion(userId, timeStamp, lastseenversion);
             var fileInfo = new FileInfo(fullPath);
 
             var chunkUploadState = new ChunkUploadState
@@ -111,9 +106,10 @@ namespace LightClientLibrary
             var uploadParams = new Dictionary<String, String>
                 {
                     {"user_id", userId},
-                    {"version", _version},
+                    {"version", lastseenversion},
                     {"prefix", filePrefix},
                 };
+
 
             return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams);
         }
@@ -164,7 +160,7 @@ namespace LightClientLibrary
             return result.ToString();
         }
 
-        private static String IncrementVersion(String userId, String timestamp, String oldversion = "")
+        public static String IncrementVersion(String userId, String timestamp, String oldversion = "")
         {
             var dvvset = new Dvvdotnet();
             Clock dot;
@@ -394,7 +390,6 @@ namespace LightClientLibrary
 
                         if (uploadState.IsLastChunk)
                         {
-                            FileUploadResponse.TryWriteLastSeenVersion(fileInfo, _version);
 
                             var message = $"File {fileInfo.FullName} was uploaded";
                             Log.Information(message);
