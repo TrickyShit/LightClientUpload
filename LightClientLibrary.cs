@@ -7,7 +7,9 @@ using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+
 using LUC.DVVSet;
+
 using Newtonsoft.Json;
 
 using Serilog;
@@ -81,7 +83,7 @@ namespace LightClientLibrary
         /// <param name = "filePrefix"> Prefix from server, need if file located in the subdirectory, can be empty</param>
         /// <param name = "lastseenversion"> Vector clock version from server (optional parameter)</param>
         /// <returns>HttpResponseMessage from server</returns>
-        public async Task<HttpResponseMessage> Upload(String host, String token, String userId, String bucketId, String fullPath, String filePrefix, String lastseenversion)
+        public async Task<HttpResponseMessage> Upload(String host, String token, String userId, String bucketId, String fullPath, String filePrefix, String lastseenversion = "")
         {
             Host = host;
             String requestUri;
@@ -109,7 +111,6 @@ namespace LightClientLibrary
                     {"version", lastseenversion},
                     {"prefix", filePrefix},
                 };
-
 
             return await ResponseOfIterativelyUploadFile(fileInfo, token, chunkUploadState, uploadParams);
         }
@@ -149,7 +150,7 @@ namespace LightClientLibrary
             result.Append(uri[0] + "/");
             for (var i = 1; i < uri.Length; i++)
             {
-                if (uri[i] == null|| uri[i] == "")
+                if (uri[i] == null || uri[i] == "")
                 {
                     continue;
                 }
@@ -162,16 +163,15 @@ namespace LightClientLibrary
 
         public static String IncrementVersion(String userId, String timestamp, String oldversion = "")
         {
-            var dvvset = new Dvvdotnet();
             Clock dot;
             if (String.IsNullOrEmpty(oldversion))
             {
-                dot = dvvset.Update(new Clock(timestamp), userId);
+                dot = Dvvdotnet.Update(new Clock(timestamp), userId);
             }
             else
             {
                 var incomeClock = Clock.StringToClock(oldversion);
-                dot = dvvset.Update(incomeClock, userId);
+                dot = Dvvdotnet.Update(incomeClock, userId);
             }
             var d = Clock.ClockToString(dot);
             var version = Convert.ToBase64String(Encoding.UTF8.GetBytes(d));
@@ -248,7 +248,7 @@ namespace LightClientLibrary
                         uploadState.IsLastChunk = true;
                     }
 
-                    var percents = uploadState.PartNumber * FileUploadChunkSize / (Double) fileInfo.Length;
+                    var percents = uploadState.PartNumber * FileUploadChunkSize / (Double)fileInfo.Length;
                     Log.Information($"Upload part[{uploadState.PartNumber}] for file {fileInfo.Name}. Uploaded {percents:P2}");
 
                     MultipartFormDataContent multipartFormData;
@@ -268,6 +268,7 @@ namespace LightClientLibrary
                                                                                         currentLocalMd5, fileInfo);
 
                         var str = await response.Content.ReadAsStringAsync();
+
                         var responseGetGuid = JsonConvert.DeserializeObject<FileUploadResponse>(str);
 
                         if (responseGetGuid != null && !responseGetGuid.IsSuccess)
@@ -275,7 +276,7 @@ namespace LightClientLibrary
                             return response;
                         }
 
-                        if (response.StatusCode is (HttpStatusCode) 206)
+                        if (response.StatusCode is (HttpStatusCode)206)
                         {
                             if (uploadState.IsLastChunk)
                             {
@@ -301,7 +302,7 @@ namespace LightClientLibrary
 
                     multipartFormData = MultipartFormData(calculatedMd5S, currentLocalMd5, uploadState,
                                                             uploadParams, fileInfo, currentPlainBytes);
-                    multipartFormData.Add(new StringContent(uploadState.PartNumber.ToString()), "part_number");
+                    multipartFormData.Add(new StringContent((uploadState.PartNumber).ToString()), "part_number");
 
                     response = await ServerUploadResponse(multipartFormData, token, uploadState,
                        currentLocalMd5, fileInfo);

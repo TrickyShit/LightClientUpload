@@ -14,7 +14,7 @@ namespace LightClientLibrary
 {
     public abstract class BaseResponse
     {
-        public Boolean IsSuccess { get; set; } = true;
+        public Boolean IsSuccess { get; set; } = false;
         public String Message { get; set; }
     }
 
