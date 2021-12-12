@@ -70,7 +70,7 @@
     <PackageReference Include="CodeFluentRuntimeClient">
       <Version>1.0.0.844</Version>
     </PackageReference>
-    <PackageReference Include="LUC.DVVSet" Version="1.0.0.4" />
+    <PackageReference Include="LUC.DVVSet" Version="1.0.1" />
     <PackageReference Include="Newtonsoft.Json">
       <Version>13.0.1</Version>
     </PackageReference>
