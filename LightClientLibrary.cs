@@ -271,6 +271,8 @@ namespace LightClientLibrary
 
                         var responseGetGuid = JsonConvert.DeserializeObject<FileUploadResponse>(str);
 
+                        if (response.IsSuccessStatusCode) responseGetGuid.IsSuccess = true;
+
                         if (responseGetGuid != null && !responseGetGuid.IsSuccess)
                         {
                             return response;
