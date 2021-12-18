@@ -31,6 +31,28 @@ namespace LightClientLibrary
         /// </summary>
         public String Host { get; set; }
 
+        private String IncrementVersion(String userId, String timestamp, String oldversion = "")
+        {
+            Clock dot;
+            if (String.IsNullOrEmpty(oldversion))
+            {
+                dot = Dvvdotnet.Update(new Clock(timestamp), userId);
+            }
+            else
+            {
+                var incomeClock = Clock.StringToClock(oldversion);
+
+                if (incomeClock == null) //if oldversion is incorrect
+                    return null;
+
+                dot = Dvvdotnet.Update(incomeClock, userId);
+            }
+            var d = Clock.ClockToString(dot);
+            var version = Convert.ToBase64String(Encoding.UTF8.GetBytes(d));
+
+            return version;
+        }
+
         /// <summary>
         /// Provides authorization to server with login, password and Url of server
         /// </summary>
@@ -105,10 +127,23 @@ namespace LightClientLibrary
                 IsFirstChunk = true
             };
 
+            DateTime lastWriteTimeUtc = File.GetLastWriteTimeUtc(fullPath);
+            String timeStamp = ((Int32)(lastWriteTimeUtc - new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds).ToString();
+
+            String version =
+                lastseenversion == "" ?
+                IncrementVersion(userId, timeStamp) :
+                IncrementVersion(userId, timeStamp, lastseenversion);
+
+            if (version == null)
+            {
+                version = IncrementVersion(userId, timeStamp);
+            }
+
             var uploadParams = new Dictionary<String, String>
                 {
                     {"user_id", userId},
-                    {"version", lastseenversion},
+                    {"version", version},
                     {"prefix", filePrefix},
                 };
 
@@ -160,25 +195,6 @@ namespace LightClientLibrary
             }
             return result.ToString();
         }
-
-        public static String IncrementVersion(String userId, String timestamp, String oldversion = "")
-        {
-            Clock dot;
-            if (String.IsNullOrEmpty(oldversion))
-            {
-                dot = Dvvdotnet.Update(new Clock(timestamp), userId);
-            }
-            else
-            {
-                var incomeClock = Clock.StringToClock(oldversion);
-                dot = Dvvdotnet.Update(incomeClock, userId);
-            }
-            var d = Clock.ClockToString(dot);
-            var version = Convert.ToBase64String(Encoding.UTF8.GetBytes(d));
-
-            return version;
-        }
-
         private MultipartFormDataContent MultipartFormData(List<String> calculatedMd5S, String md5OfChunk,
             ChunkUploadState uploadState, Dictionary<String, String> uploadParams, FileInfo fileInfo, Byte[] bytes = null)
         {
@@ -270,6 +286,10 @@ namespace LightClientLibrary
                         var str = await response.Content.ReadAsStringAsync();
 
                         var responseGetGuid = JsonConvert.DeserializeObject<FileUploadResponse>(str);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            responseGetGuid.IsSuccess = true;
+                        }
 
                         if (responseGetGuid != null && !responseGetGuid.IsSuccess)
                         {
@@ -288,11 +308,11 @@ namespace LightClientLibrary
                             continue;
                         }
 
-                        if (uploadState.LastResponse != null)
-                        {
-                            FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo,
-                                uploadState.LastResponse.Guid);
-                        }
+                        //if (uploadState.LastResponse != null)
+                        //{
+                        //    FileUploadResponse.TryWriteGuidAndLocalPathMarkersIfNotTheSame(fileInfo,
+                        //        uploadState.LastResponse.Guid);
+                        //}
                     }
 
                     if (uploadState.LastResponse?.UploadId != null)
