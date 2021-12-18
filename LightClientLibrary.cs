@@ -291,6 +291,8 @@ namespace LightClientLibrary
                             responseGetGuid.IsSuccess = true;
                         }
 
+                        if (response.IsSuccessStatusCode) responseGetGuid.IsSuccess = true;
+
                         if (responseGetGuid != null && !responseGetGuid.IsSuccess)
                         {
                             return response;
